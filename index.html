@@ -1,531 +1,552 @@
-// =============================================================================
-// HTML page (served from PROGMEM) - Web Bluetooth version
-// FIX #15: status endpoint shows TF card info; web UI shows card status
-// =============================================================================
-const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BCMCH Sensor</title>
-<style>
-*{box-sizing:border-box}
-body{font-family:'Segoe UI',sans-serif;background:linear-gradient(135deg,#0a0a1a,#0f0f23);color:white;padding:15px;margin:0}
-.splash{position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,#00d4ff,#0066aa);display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:1000;transition:opacity 1s}
-.splash.hide{opacity:0;pointer-events:none}
-.splash h1{font-size:2.5rem;margin:0}
-.splash p{font-size:1rem;margin-top:15px;opacity:0.8}
-.container{max-width:620px;margin:0 auto}
-.card{background:rgba(255,255,255,0.08);backdrop-filter:blur(10px);border-radius:18px;padding:16px;margin-bottom:14px}
-h1{text-align:center;color:#00d4ff;margin:0 0 14px 0;font-size:1.4rem}
-h2{font-size:1rem;margin:0 0 12px 0;border-left:3px solid #00d4ff;padding-left:8px}
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.cell{background:rgba(0,0,0,0.3);border-radius:10px;padding:10px;text-align:center}
-.lbl{font-size:0.65rem;color:#888;margin-bottom:4px}
-.val{font-size:1.05rem;font-weight:bold;color:#00d4ff}
-.unit{font-size:0.55rem;color:#666}
-.temp{text-align:center;margin-top:12px;padding:8px;background:rgba(0,0,0,0.3);border-radius:8px}
-button{background:linear-gradient(135deg,#00d4ff,#0099cc);border:none;color:white;padding:9px 18px;font-size:0.85rem;border-radius:22px;cursor:pointer;margin:4px;transition:transform 0.15s}
-button:hover{transform:scale(1.03)}
-button.rec{background:linear-gradient(135deg,#ff4444,#cc0000)}
-button.stop{background:linear-gradient(135deg,#ff8800,#cc5500)}
-.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
-.dot.on{background:#00ff88;box-shadow:0 0 4px #00ff88}
-.dot.off{background:#ff4444}
-.dot.warn{background:#ffaa00}
-canvas{width:100%;height:70px;background:rgba(0,0,0,0.5);border-radius:8px;margin-top:12px}
-.btns{text-align:center;margin-top:12px}
-.info{font-size:0.65rem;text-align:center;margin-top:7px;color:#888}
-.recbar{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:8px}
-.rectime{font-size:0.9rem;color:#ff4444;font-weight:bold;min-width:60px;text-align:center}
-.status-row{display:flex;gap:16px;flex-wrap:wrap;font-size:0.72rem;margin-bottom:10px;color:#aaa}
-.status-item{display:flex;align-items:center;gap:5px}
-footer{text-align:center;font-size:0.65rem;color:#555;margin-top:12px}
-.connect-btn{background:linear-gradient(135deg,#00ff88,#00aa66);font-size:1.1rem;padding:12px 24px;border-radius:25px}
-.connect-btn:hover{transform:scale(1.05)}
-</style>
+  <meta charset="UTF-8">
+  <title>BCMCH Sensor Hub (BLE/Web Bluetooth)</title>
+  <style>
+    :root {
+      --primary: #00d4ff;
+      --bg-dark: #0a0a1a;
+      --bg-darker: #05070b;
+      --text-light: #eaf7ff;
+      --text-muted: #888;
+      --success: #00ff88;
+      --warning: #ffaa00;
+      --error: #ff4444;
+    }
+    
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--bg-dark);
+      color: var(--text-light);
+      line-height: 1.6;
+      padding: 1rem;
+    }
+    .container { max-width: 600px; margin: 0 auto; }
+    header {
+      text-align: center;
+      padding: 2rem 0;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    h1 { 
+      font-size: 2rem; 
+      color: var(--primary);
+      margin-bottom: 0.5rem;
+    }
+    .status-bar {
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin: 1.5rem 0;
+      padding: 1rem;
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+    }
+    .status-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 80px;
+    }
+    .status-label { 
+      font-size: 0.8rem; 
+      color: var(--text-muted);
+      margin-bottom: 0.25rem;
+    }
+    .status-value {
+      font-size: 1.1rem;
+      font-weight: bold;
+      min-width: 60px;
+      text-align: center;
+    }
+    .dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 5px;
+    }
+    .dot.connected { background: var(--success); }
+    .dot.disconnected { background: var(--error); }
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 0.75rem;
+      margin: 1.5rem 0;
+    }
+    button {
+      background: linear-gradient(135deg, var(--primary), #0099c8a9c);
+      color: white;
+      border: none;
+      padding: 0.75rem 1.25rem;
+      font-size: 0.9rem;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-weight: 600;
+    }
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 212, 255, 0.3);
+    }
+    button:active {
+      transform: translateY(0);
+    }
+    button.recording {
+      background: linear-gradient(135deg, var(--error), #cc0000);
+    }
+    button.recording:hover {
+      box-shadow: 0 4px 12px rgba(255, 68, 68, 0.3);
+    }
+    .data-panel {
+      background: rgba(255,255,255,0.03);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin: 1.5rem 0;
+    }
+    .data-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .data-row:last-child { border-bottom: none; }
+    .data-label { 
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+    .data-value {
+      font-size: 1rem;
+      font-family: 'Courier New', monospace;
+      min-width: 100px;
+      text-align: right;
+    }
+    .chart-container {
+      height: 120px;
+      background: rgba(0,0,0,0.3);
+      border-radius: 8px;
+      margin: 1rem 0;
+      position: relative;
+      overflow: hidden;
+    }
+    #imuChart {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    footer {
+      text-align: center;
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+  </style>
 </head>
 <body>
-<div class="splash" id="splash">
-<h1>BCMCH Sensor</h1>
-<p>Medical Grade Motion &amp; Audio Monitor</p>
-</div>
-<div class="container">
-<div class="card">
-<h1>BCMCH Sensor Hub (BLE)</h1>
-<!-- FIX #15: status row shows IMU + TF card state -->
-<div class="status-row">
-  <div class="status-item"><span class="dot off" id="imuDot"></span><span id="imuState">Connect via BLE</span></div>
-  <div class="status-item"><span class="dot off" id="tfDot"></span><span id="tfState">TF: checking...</span></div>
-  <div class="status-item" style="margin-left:auto"><span id="rowCount" style="color:#888">0 rows</span></div>
-</div>
-<div class="btns">
-<button class="connect-btn" onclick="connectBLE()">Connect to Device</button>
-</div>
-<div class="grid">
-<div class="cell"><div class="lbl">Accel X</div><div class="val" id="ax">0.000</div><div class="unit">g</div></div>
-<div class="cell"><div class="lbl">Accel Y</div><div class="val" id="ay">0.000</div><div class="unit">g</div></div>
-<div class="cell"><div class="lbl">Accel Z</div><div class="val" id="az">0.000</div><div class="unit">g</div></div>
-<div class="cell"><div class="lbl">Gyro X</div><div class="val" id="gx">0.0</div><div class="unit">dps</div></div>
-<div class="cell"><div class="lbl">Gyro Y</div><div class="val" id="gy">0.0</div><div class="unit">dps</div></div>
-<div class="cell"><div class="lbl">Gyro Z</div><div class="val" id="gz">0.0</div><div class="unit">dps</div></div>
-</div>
-<div class="temp">Temperature: <span id="temp">--</span> &deg;C (calibrated)</div>
-<div class="btns">
-<button onclick="downloadCSV()">Download IMU CSV</button>
-<button onclick="resetCSVData()">Reset CSV</button>
-</div>
-</div>
-<div class="card">
-<h2>Audio Monitor</h2>
-<div class="btns">
-<button id="monBtn" onclick="toggleMonitor()">Start Monitor</button>
-</div>
-<canvas id="visualizer" width="500" height="70"></canvas>
-<div class="info">MEMS Mic (RIGHT ch) | 16 kHz | BLE Audio Characteristic</div>
-</div>
-<div class="card">
-<h2>Audio Recording</h2>
-<div class="btns">
-<button id="recBtn" onclick="toggleRec()" class="rec">Start Recording</button>
-<button onclick="downloadWAV()" id="dlWavBtn">Download WAV</button>
-</div>
-<div class="recbar">
-<span id="recInd" style="color:#555">Stopped</span>
-<span class="rectime" id="recTime">0.0 s</span>
-</div>
-<div class="info">Up to 60 s | 16kHz mono 16-bit WAV | stored on device</div>
-</div>
-</div>
-<footer>BCMCH Sensor | QMI8658 200Hz IMU | MEMS Mic 16kHz</footer>
-<script>
-let imuChar = null, audioChar = null, cmdChar = null, statusChar = null;
-let audioCtx = null, isMonOn = false, isRecOn = false;
-let rowCount = 0, recStartTime = 0, recTimer = null;
-let device = null;
+  <div class="container">
+    <header>
+      <h1>BCMCH Sensor Hub</h1>
+      <p>BLE/Web Bluetooth Interface</p>
+    </header>
 
-setTimeout(()=>{
-  const s=document.getElementById('splash');
-  s.classList.add('hide');
-  setTimeout(()=>s.style.display='none',1000);
-},3000);
+    <div class="status-bar">
+      <div class="status-item">
+        <div class="dot" id="connectionDot"></div>
+        <div class="status-label">Connection</div>
+      </div>
+      <div class="status-item">
+        <div class="status-value" id="imuRate">-- Hz</div>
+        <div class="status-label">IMU Rate</div>
+      </div>
+      <div class="status-item">
+        <div class="status-value" id="recordingStatus">Stopped</div>
+        <div class="status-label">Recording</div>
+      </div>
+      <div class="status-item">
+        <div class="status-value" id="batteryStatus">-- V</div>
+        <div class="status-label">Battery</div>
+      </div>
+      <div class="status-item">
+        <div class="status-value" id="tfStatus">Checking...</div>
+        <div class="status-label">TF Card</div>
+      </div>
+    </div>
 
-async function connectBLE() {
-    try {
-        // Request BLE device with our service UUIDs
-        device = await navigator.bluetooth.requestDevice({
-            filters: [{ services: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e'] }],
-            optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e']
+    <div class="controls">
+      <button id="connectBtn">Connect Device</button>
+      <button id="startRecBtn">Start Recording</button>
+      <button id="stopRecBtn">Stop Recording</button>
+      <button id="resetCsvBtn">Reset CSV</button>
+      <button id="setTimeBtn">Set Time</button>
+    </div>
+
+    <div class="data-panel">
+      <div class="data-row">
+        <div class="data-label">Accel X (g)</div>
+        <div class="data-value" id="accelX">0.000</div>
+      </div>
+      <div class="data-row">
+        <div class="data-label">Accel Y (g)</div>
+        <div class="data-value" id="accelY">0.000</div>
+      </div>
+      <div class="data-row">
+        <div class="data-label">Accel Z (g)</div>
+        <div class="data-value" id="accelZ">0.000</div>
+      </div>
+      <div class="data-row">
+        <div class="data-label">Gyro X (dps)</div>
+        <div class="data-value" id="gyroX">0.0</div>
+      </div>
+      <div class="data-row">
+        <div class="data-label">Gyro Y (dps)</div>
+        <div class="data-value" id="gyroY">0.0</div>
+      </div>
+      <div class="data-row">
+        <div class="data-label">Gyro Z (dps)</div>
+        <div class="data-value" id="gyroZ">0.0</div>
+      </div>
+      <div class="data-row">
+        <div class="data-label">Temperature (°C)</div>
+        <div class="data-value" id="temperature">--</div>
+      </div>
+    </div>
+
+    <div class="chart-container">
+      <canvas id="imuChart"></canvas>
+    </div>
+
+    <footer>
+      BCMCH Sensor Hub v4.6.0-BLE | BLE Peripheral | Web Bluetooth Compatible
+    </footer>
+  </div>
+
+  <script>
+    // BLE UUIDs (must match Arduino sketch)
+    const SERVICE_UUID = "19b10000-e8f2-537e-4f6c-d104768a1214";
+    const IMU_CHAR_UUID = "19b10001-e8f2-537e-4f6c-d104768a1214";
+    const CONTROL_CHAR_UUID = "19b10002-e8f2-537e-4f6c-d104768a1214";
+    const STATUS_CHAR_UUID = "19b10003-e8f2-537e-4f6c-d104768a1214";
+
+    let bluetoothDevice = null;
+    let server = null;
+    let imuCharacteristic = null;
+    let controlCharacteristic = null;
+    let statusCharacteristic = null;
+    let isConnected = false;
+    let isRecording = false;
+    let imuData = { ax: 0, ay: 0, az: 0, gx: 0, gy: 0, gz: 0, temp: 0 };
+    let lastImuTime = 0;
+    let imuChart = null;
+    let imuHistory = {
+      timestamps: [],
+      accel: { x: [], y: [], z: [] },
+      gyro: { x: [], y: [], z: [] }
+    };
+    const HISTORY_LENGTH = 50; // Show last 50 samples
+
+    // DOM Elements
+    const connectBtn = document.getElementById('connectBtn');
+    const startRecBtn = document.getElementById('startRecBtn');
+    const stopRecBtn = document.getElementById('stopRecBtn');
+    const resetCsvBtn = document.getElementById('resetCsvBtn');
+    const setTimeBtn = document.getElementById('setTimeBtn');
+    const connectionDot = document.getElementById('connectionDot');
+    const imuRateEl = document.getElementById('imuRate');
+    const recordingStatusEl = document.getElementById('recordingStatus');
+    const batteryStatusEl = document.getElementById('batteryStatus');
+    const tfStatusEl = document.getElementById('tfStatus');
+    const accelXEl = document.getElementById('accelX');
+    const accelYEl = document.getElementById('accelY');
+    const accelZEl = document.getElementById('accelZ');
+    const gyroXEl = document.getElementById('gyroX');
+    const gyroYEl = document.getElementById('gyroY');
+    const gyroZEl = document.getElementById('gyroZ');
+    const tempEl = document.getElementById('temperature');
+
+    // Initialize chart
+    function initChart() {
+      const ctx = document.getElementById('imuChart').getContext('2d');
+      imuChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: 'Accel X',
+              data: [],
+              borderColor: 'rgba(0, 212, 255, 0.8)',
+              backgroundColor: 'rgba(0, 212, 255, 0.2)',
+              tension: 0.3,
+              fill: false,
+              borderWidth: 2
+            },
+            {
+              label: 'Accel Y',
+              data: [],
+              borderColor: 'rgba(255, 165, 0, 0.8)',
+              backgroundColor: 'rgba(255, 165, 0, 0.2)',
+              tension: 0.3,
+              fill: false,
+              borderWidth: 2
+            },
+            {
+              label: 'Accel Z',
+              data: [],
+              borderColor: 'rgba(255, 68, 68, 0.8)',
+              backgroundColor: 'rgba(255, 68, 68, 0.2)',
+              tension: 0.3,
+              fill: false,
+              borderWidth: 2
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          scales: {
+            y: {
+              beginAtZero: false,
+              grid: { color: 'rgba(255,255,255,0.1)' },
+              ticks: { color: '#ccc' }
+            },
+            x: {
+              display: false,
+              grid: { display: false }
+            }
+          },
+          plugins: {
+            legend: {
+              labels: { color: '#ccc' }
+            },
+            tooltip: {
+              backgroundColor: 'rgba(0,0,0,0.8)',
+              titleColor: '#fff',
+              bodyColor: '#fff'
+            }
+          }
+        }
+      });
+    }
+
+    // Update chart with new IMU data
+    function updateChart() {
+      const now = Date.now();
+      imuHistory.timestamps.push(now);
+      imuHistory.accel.x.push(imuData.ax);
+      imuHistory.accel.y.push(imuData.ay);
+      imuHistory.accel.z.push(imuData.az);
+
+      // Keep only last N samples
+      if (imuHistory.timestamps.length > HISTORY_LENGTH) {
+        imuHistory.timestamps.shift();
+        imuHistory.accel.x.shift();
+        imuHistory.accel.y.shift();
+        imuHistory.accel.z.shift();
+      }
+
+      // Update chart data
+      imuChart.data.labels = imuHistory.timestamps.map(t => 
+        new Date(t - imuHistory.timestamps[0]).toLocaleTimeString()
+      );
+      imuChart.data.datasets[0].data = imuHistory.accel.x;
+      imuChart.data.datasets[1].data = imuHistory.accel.y;
+      imuChart.data.datasets[2].data = imuHistory.accel.z;
+      
+      imuChart.update('none');
+    }
+
+    // Connect to BLE device
+    async function connectToDevice() {
+      try {
+        connectionDot.className = 'dot connecting';
+        connectBtn.textContent = 'Connecting...';
+        connectBtn.disabled = true;
+
+        // Request BLE device with our service
+        bluetoothDevice = await navigator.bluetooth.requestDevice({
+          filters: [{ services: [SERVICE_UUID] }],
+          optionalServices: [SERVICE_UUID]
         });
 
-        const server = await device.gatt.connect();
+        // Handle disconnection
+        bluetoothDevice.addEventListener('gattserverdisconnected', onDisconnected);
 
-        // Get the service
-        const service = await server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
-
+        // Connect to GATT Server
+        server = await bluetoothDevice.gatt.connect();
+        connectionDot.className = 'dot connected';
+        connectBtn.textContent = 'Connected';
+        
+        // Get service
+        const service = await server.getPrimaryService(SERVICE_UUID);
+        
         // Get characteristics
-        imuChar = await service.getCharacteristic('6e400003-b5a3-f393-e0a9-e50e24dcca9e');
-        audioChar = await service.getCharacteristic('6e400004-b5a3-f393-e0a9-e50e24dcca9e');
-        cmdChar = await service.getCharacteristic('6e400005-b5a3-f393-e0a9-e50e24dcca9e');
-        statusChar = await service.getCharacteristic('6e400006-b5a3-f393-e0a9-e50e24dcca9e');
-
-        // Update UI
-        document.getElementById('imuState').textContent = 'Connected (200 Hz)';
-        document.getElementById('imuDot').className = 'dot on';
-
-        // Start listening for IMU notifications
-        await imuChar.startNotifications();
-        imuChar.addEventListener('characteristicvaluechanged', handleIMUUpdate);
-
-        // Start listening for status notifications
-        await statusChar.startNotifications();
-        statusChar.addEventListener('characteristicvaluechanged', handleStatusUpdate);
-
-        // Fetch initial TF status
-        await fetchStatus();
-
-        // Auto-start audio monitor
-        startMonitor();
-
-    } catch (err) {
-        console.error('BLE Connection Error:', err);
-        alert('Failed to connect: ' + err.message);
+        imuCharacteristic = await service.getCharacteristic(IMU_CHAR_UUID);
+        controlCharacteristic = await service.getCharacteristic(CONTROL_CHAR_UUID);
+        statusCharacteristic = await service.getCharacteristic(STATUS_CHAR_UUID);
+        
+        // Start notifications
+        await imuCharacteristic.startNotifications();
+        imuCharacteristic.addEventListener('characteristicvaluechanged', handleImuNotification);
+        
+        await statusCharacteristic.startNotifications();
+        statusCharacteristic.addEventListener('characteristicvaluechanged', handleStatusNotification);
+        
+        isConnected = true;
+        updateUI();
+        
+        // Request initial status
+        await readStatus();
+        
+      } catch (error) {
+        console.error('BLE Error:', error);
+        connectionDot.className = 'dot disconnected';
+        connectBtn.textContent = 'Connect Device';
+        connectBtn.disabled = false;
+        alert('Connection failed: ' + error.message);
+      }
     }
-}
 
-function handleIMUUpdate(event) {
-    const value = event.target.value;
-    const decoder = new TextDecoder();
-    const data = JSON.parse(decoder.decode(value));
-
-    if ('ax' in data) {
-        document.getElementById('ax').textContent = data.ax.toFixed(3);
-        document.getElementById('ay').textContent = data.ay.toFixed(3);
-        document.getElementById('az').textContent = data.az.toFixed(3);
-        document.getElementById('gx').textContent = data.gx.toFixed(1);
-        document.getElementById('gy').textContent = data.gy.toFixed(1);
-        document.getElementById('gz').textContent = data.gz.toFixed(1);
-        document.getElementById('temp').textContent = data.temp.toFixed(1);
-        rowCount++;
-        document.getElementById('rowCount').textContent = rowCount + ' rows';
+    // Handle IMU notifications (20 Hz)
+    function handleImuNotification(event) {
+      const value = event.target.value;
+      if (value.byteLength < 32) return; // Expect 32 bytes (4 + 7*4)
+      
+      const dataView = new DataView(value);
+      const timestamp = dataView.getUint32(0, true); // Little endian
+      
+      // Parse floats (little endian)
+      imuData = {
+        timestamp: timestamp,
+        ax: dataView.getFloat32(4, true),
+        ay: dataView.getFloat32(8, true),
+        az: dataView.getFloat32(12, true),
+        gx: dataView.getFloat32(16, true),
+        gy: dataView.getFloat32(20, true),
+        gz: dataView.getFloat32(24, true),
+        temp: dataView.getFloat32(28, true)
+      };
+      
+      // Update UI
+      accelXEl.textContent = imuData.ax.toFixed(3);
+      accelYEl.textContent = imuData.ay.toFixed(3);
+      accelZEl.textContent = imuData.az.toFixed(3);
+      gyroXEl.textContent = imuData.gx.toFixed(1);
+      gyroYEl.textContent = imuData.gy.toFixed(1);
+      gyroZEl.textContent = imuData.gz.toFixed(1);
+      tempEl.textContent = imuData.temp.toFixed(1);
+      
+      // Calculate IMU rate (approx)
+      if (lastImuTime > 0) {
+        const rate = 1000 / (timestamp - lastImuTime);
+        imuRateEl.textContent = rate.toFixed(0) + ' Hz';
+      }
+      lastImuTime = timestamp;
+      
+      // Update chart
+      updateChart();
     }
-}
 
-function handleStatusUpdate(event) {
-    const value = event.target.value;
-    const decoder = new TextDecoder();
-    const data = JSON.parse(decoder.decode(value));
-
-    if (data.type === 'rec_started') {
-        recStartTime = Date.now();
-        recTimer = setInterval(updateRecTime, 100);
-        document.getElementById('recInd').style.color = '#ff4444';
-        document.getElementById('recInd').textContent = '* RECORDING';
-    } else if (data.type === 'rec_stopped') {
-        clearInterval(recTimer);
-        document.getElementById('recInd').textContent = 'Stopped';
-        document.getElementById('recInd').style.color = '#555';
-    } else if (data.type === 'error') {
-        alert('Device: ' + data.msg);
-    } else if (data.type === 'csv_reset') {
-        rowCount = 0;
-        document.getElementById('rowCount').textContent = '0 rows';
+    // Handle status notifications (1 Hz)
+    function handleStatusNotification(event) {
+      const value = event.target.value;
+      const text = new TextDecoder().decode(value);
+      try {
+        const status = JSON.parse(text);
+        isRecording = status.rec === true;
+        recordingStatusEl.textContent = isRecording ? 'Recording' : 'Stopped';
+        recordingStatusEl.style.color = isRecording ? 'var(--error)' : 'var(--text-light)';
+        batteryStatusEl.textContent = (status.batMv / 1000).toFixed(2) + ' V';
+        batteryStatusEl.style.color = status.batLow ? 'var(--warning)' : 'var(--text-light)';
+        tfStatusEl.textContent = status.tfState;
+        tfStatusEl.style.color = 
+          status.tfState === 'FULL' ? 'var(--warning)' : 
+          status.tfState === 'OK' ? 'var(--success)' : 'var(--error)';
+      } catch (e) {
+        console.error('Failed to parse status:', text);
+      }
     }
-}
 
-function updateRecTime() {
-    document.getElementById('recTime').textContent =
-        ((Date.now() - recStartTime) / 1000).toFixed(1) + ' s';
-}
-
-async function fetchStatus() {
-    // For BLE, we poll the status characteristic
-    if (statusChar) {
-        try {
-            const value = await statusChar.readValue();
-            const decoder = new TextDecoder();
-            const data = JSON.parse(decoder.decode(value));
-            // TF status would need to be read from a dedicated characteristic
-            // For now, show default
-            const dot = document.getElementById('tfDot');
-            const lbl = document.getElementById('tfState');
-            dot.className = 'dot warn';
-            lbl.textContent = 'TF: No card';
-        } catch (e) {
-            document.getElementById('tfState').textContent = 'TF: unknown';
-        }
+    // Read status (for initial load)
+    async function readStatus() {
+      if (!statusCharacteristic) return;
+      try {
+        const value = await statusCharacteristic.readValue();
+        const text = new TextDecoder().decode(value);
+        const status = JSON.parse(text);
+        // Update UI immediately
+        isRecording = status.rec === true;
+        recordingStatusEl.textContent = isRecording ? 'Recording' : 'Stopped';
+        recordingStatusEl.style.color = isRecording ? 'var(--error)' : 'var(--text-light)';
+        batteryStatusEl.textContent = (status.batMv / 1000).toFixed(2) + ' V';
+        batteryStatusEl.style.color = status.batLow ? 'var(--warning)' : 'var(--text-light)';
+        tfStatusEl.textContent = status.tfState;
+        tfStatusEl.style.color = 
+          status.tfState === 'FULL' ? 'var(--warning)' : 
+          status.tfState === 'OK' ? 'var(--success)' : 'var(--error)';
+      } catch (e) {
+        console.error('Failed to read status:', e);
+      }
     }
-}
 
-function downloadCSV() {
-    if (!rowCount) {
-        alert('No IMU data yet!');
+    // Send control command
+    async function sendCommand(command) {
+      if (!isConnected || !controlCharacteristic) {
+        alert('Device not connected');
         return;
+      }
+      try {
+        await controlCharacteristic.writeValue(new TextEncoder().encode(command));
+        console.log('Sent command:', command);
+      } catch (error) {
+        console.error('Failed to send command:', error);
+        alert('Command failed: ' + error.message);
+      }
     }
-    // BLE doesn't support file download directly
-    // In a real implementation, you'd need a separate characteristic for CSV data
-    alert('CSV download via BLE requires a dedicated characteristic.\n\nCurrent data is stored on the device SD card.');
-}
 
-function resetCSVData() {
-    rowCount = 0;
-    document.getElementById('rowCount').textContent = '0 rows';
-    if (cmdChar) {
-        const encoder = new TextEncoder();
-        cmdChar.writeValue(encoder.encode('reset_csv'));
-    }
-}
-
-function toggleMonitor() {
-    isMonOn ? stopMonitor() : startMonitor();
-}
-
-function startMonitor() {
-    if (!audioChar) {
-        alert('BLE not connected');
-        return;
-    }
-    
-    isMonOn = true;
-    const b = document.getElementById('monBtn');
-    b.textContent = 'Stop Monitor';
-    b.classList.add('stop');
-
-    // Subscribe to audio notifications
-    audioChar.startNotifications().then(() => {
-        audioChar.addEventListener('characteristicvaluechanged', handleAudioUpdate);
+    // Event Listeners
+    connectBtn.addEventListener('click', connectToDevice);
+    startRecBtn.addEventListener('click', () => sendCommand('START_REC'));
+    stopRecBtn.addEventListener('click', () => sendCommand('STOP_REC'));
+    resetCsvBtn.addEventListener('click', () => sendCommand('RESET_CSV'));
+    setTimeBtn.addEventListener('click', async () => {
+      const timeStr = prompt('Enter wall-clock time (YYYY-MM-DD HH:MM:SS):');
+      if (timeStr) {
+        sendCommand('SET_TIME:' + timeStr.trim());
+      }
     });
-}
 
-function stopMonitor() {
-    if (audioChar) {
-        audioChar.stopNotifications();
+    // Handle disconnection
+    function onDisconnected() {
+      isConnected = false;
+      connectionDot.className = 'dot disconnected';
+      connectBtn.textContent = 'Connect Device';
+      connectBtn.disabled = false;
+      imuRateEl.textContent = '-- Hz';
+      recordingStatusEl.textContent = 'Disconnected';
+      recordingStatusEl.style.color = 'var(--text-muted)';
+      console.log('Device disconnected');
     }
-    isMonOn = false;
-    const b = document.getElementById('monBtn');
-    b.textContent = 'Start Monitor';
-    b.classList.remove('stop');
-}
 
-function handleAudioUpdate(event) {
-    const value = event.target.value;
-    const i16 = new Int16Array(value.buffer);
-    const f32 = new Float32Array(i16.length);
-    let sum = 0;
-    for (let i = 0; i < i16.length; i++) {
-        f32[i] = i16[i] / 32768;
-        sum += Math.abs(f32[i]);
+    // Initial UI update
+    function updateUI() {
+      if (isConnected) {
+        connectionDot.className.textContent = 'dot connected';
+        connectBtn.textContent = 'Connected';
+      } else {
+        connectionDot.className = 'dot disconnected';
+        connectBtn.textContent = 'Connect Device';
+        connectBtn.disabled = false;
+      }
     }
-    const cv = document.getElementById('visualizer');
-    const cx = cv.getContext('2d');
-    cx.fillStyle = 'rgba(0,0,0,0.5)';
-    cx.fillRect(0, 0, cv.width, cv.height);
-    const h = Math.min(cv.height, (sum / i16.length) * cv.height * 4);
-    cx.fillStyle = '#00d4ff';
-    cx.fillRect(0, cv.height - h, cv.width, h);
 
-    // Audio playback via Web Audio API
-    if (audioCtx && audioCtx.state === 'running') {
-        const ab = audioCtx.createBuffer(1, i16.length, 16000);
-        ab.copyToChannel(f32, 0);
-        const src = audioCtx.createBufferSource();
-        src.buffer = ab;
-        src.connect(audioCtx.destination);
-        src.start(audioCtx.currentTime);
-        src.onended = () => src.disconnect();
-    }
-}
-
-function toggleRec() {
-    isRecOn ? stopRec() : startRec();
-}
-
-function startRec() {
-    if (!cmdChar) {
-        alert('BLE not connected');
-        return;
-    }
-    const encoder = new TextEncoder();
-    cmdChar.writeValue(encoder.encode('start_rec'));
-    isRecOn = true;
-    const b = document.getElementById('recBtn');
-    b.textContent = 'Stop Recording';
-    b.classList.remove('rec');
-    b.classList.add('stop');
-    document.getElementById('recTime').textContent = '0.0 s';
-}
-
-function stopRec() {
-    if (cmdChar) {
-        const encoder = new TextEncoder();
-        cmdChar.writeValue(encoder.encode('stop_rec'));
-    }
-    isRecOn = false;
-    clearInterval(recTimer);
-    const b = document.getElementById('recBtn');
-    b.textContent = 'Start Recording';
-    b.classList.remove('stop');
-    b.classList.add('rec');
-}
-
-function downloadWAV() {
-    // BLE doesn't support file download directly
-    alert('WAV download via BLE requires a dedicated characteristic.\n\nThe recording is saved to the device SD card.');
-}
-
-// Auto-connect on page load (user must approve)
-window.addEventListener('load', () => {
-    // Note: Modern browsers require user gesture for Bluetooth,
-    // so we show a button instead of auto-connecting
-    console.log('Click "Connect to Device" to start');
-});
-</script>
+    // Initialize
+    initChart();
+    updateUI();
+  </script>
 </body>
 </html>
-)rawliteral";
-
-// =============================================================================
-// BLE Setup
-// =============================================================================
-void setupBLE() {
-    BLEDevice::init("BCMCH_Sensor_Hub");
-    
-    bleServer = BLEDevice::createServer();
-    bleServer->setCallbacks(new ServerCallbacks());
-
-    // Create IMU Service
-    imuService = BLEDevice::createService(SERVICE_UUID);
-    
-    // IMU Characteristic (Notify)
-    imuChar = imuService->createCharacteristic(
-        CHAR_IMU_UUID,
-        BLECharacteristic::PROPERTY_NOTIFY
-    );
-    imuChar->setCallbacks(new IMUCallbacks());
-
-    // Audio Characteristic (Notify)
-    audioChar = imuService->createCharacteristic(
-        CHAR_AUDIO_UUID,
-        BLECharacteristic::PROPERTY_NOTIFY
-    );
-    audioChar->addDescriptor(new BLE2902());
-
-    // Command Characteristic (Write)
-    cmdChar = imuService->createCharacteristic(
-        CHAR_CMD_UUID,
-        BLECharacteristic::PROPERTY_WRITE
-    );
-    cmdChar->setCallbacks(new CommandCallbacks());
-
-    // Status Characteristic (Notify)
-    statusChar = imuService->createCharacteristic(
-        CHAR_STATUS_UUID,
-        BLECharacteristic::PROPERTY_NOTIFY
-    );
-    statusChar->addDescriptor(new BLE2902());
-
-    // Start services
-    imuService->start();
-
-    // Advertise
-    BLEAdvertising *advertising = BLEDevice::getAdvertising();
-    advertising->addServiceUUID(SERVICE_UUID);
-    advertising->setScanResponse(true);
-    advertising->setMinPreferred(0x06);  // functions to improve connection interval
-    advertising->setMinPreferred(0x12);
-    BLEDevice::startAdvertising();
-
-    Serial.println("[BLE] Advertising started");
-}
-
-// =============================================================================
-// Setup
-// =============================================================================
-void setup() {
-    initPowerControl();
-    Serial.begin(115200);
-    delay(400);
-    Serial.println("\n=== BCMCH Sensor Hub v4.4 (BLE Edition) ===");
-
-    Wire.begin(I2C_SDA, I2C_SCL, 400000UL);
-    Wire.setTimeOut(100);
-
-    // FIX #20: init CH422G direction register once here
-    ch422g_init();
-
-    lcdInit();
-    splashUntil = millis() + 3000;
-    initIMU();
-    initCSV();
-    if (csvBuffer)
-        Serial.printf("[CSV] Buffer: %.1f KB\n", csvMaxBytes / 1024.0f);
-
-    // Audio recording buffer (PSRAM preferred)
-    if (psramFound()) {
-        audioRecBuf = (int16_t*)ps_malloc(AUDIO_REC_SAMPLES * sizeof(int16_t));
-        Serial.printf("[REC] PSRAM buffer: %.1f MB\n",
-            (AUDIO_REC_SAMPLES * sizeof(int16_t)) / 1048576.0f);
-    } else {
-        const uint32_t fallback = SAMPLE_RATE * 10;
-        audioRecBuf = (int16_t*)malloc(fallback * sizeof(int16_t));
-        Serial.println("[REC] SRAM fallback: 10 s");
-    }
-
-    audioRecMutex = xSemaphoreCreateMutex();
-    imuMutex      = xSemaphoreCreateMutex();
-    tfMutex       = xSemaphoreCreateMutex();
-
-    // FIX #6: load/increment session counter from NVS before TF init
-    tfLoadSessionCounter();
-    Serial.printf("[TF] Session #%lu\n", (unsigned long)tfSessionCounter);
-
-    // TF Card probe -- EXIO3 is already HIGH from ch422g_init()
-    delay(50);   // let card power rail settle
-    tfCardPresent = initTFCard();
-    Serial.println(tfCardPresent
-        ? "[TF] Card present -- logging ENABLED (always-on, batch flush ~1s)"
-        : "[TF] No card -- RAM-only mode");
-
-    // FIX #13: LCD UI shows TF status -- must be after tfCardPresent is set,
-    //          but lvglCreateUi() reads it, so rebuild is not needed;
-    //          the label was already built in lcdInit() -> lvglCreateUi()
-    //          which is called AFTER ch422g_init() so EXIO3 is safe.
-
-    initMicrophone();
-    initSpeaker();
-    playStartupBeep();   // FIX #11: now only 200 ms
-
-    // BLE Setup
-    setupBLE();
-    
-    Serial.println("  BLE Device: BCMCH_Sensor_Hub");
-    Serial.println("  Services: IMU(200Hz), Audio(16kHz), Commands, Status");
-
-    // WebSocket setup for backward compatibility (removed in final version)
-    // Keeping for reference - these will be removed in production
-    
-    wsIMU.begin();   wsIMU.onEvent(onIMUEvent);
-    wsAudio.begin(); wsAudio.onEvent(onAudioEvent);
-    httpServer.begin();
-
-    // FIX #3: imuTask stack 4096 -> 8192
-    // FIX #4:  audioTask stack 4096 -> 6144
-    // FIX #25: audioTask moved from core 1 -> core 0. i2s_read() in audioTask
-    //          was blocking loop() (also core 1), preventing lv_timer_handler()
-    //          from running and stalling LCD updates. imuTask (priority 5) will
-    //          preempt audioTask (priority 4) on core 0, keeping 200 Hz sampling
-    //          intact. loop() on core 1 now runs freely.
-    xTaskCreatePinnedToCore(imuTask,   "imu",   8192, NULL, 5, NULL, 0);
-    xTaskCreatePinnedToCore(audioTask, "audio", 6144, NULL, 4, NULL, 0);
-    Serial.println("Ready. Tasks running.");
-}
-
-// =============================================================================
-// Loop
-// =============================================================================
-void loop() {
-    wsIMU.loop();
-    wsAudio.loop();
-
-    // FIX #21: IMU WebSocket broadcast -- must run on core 1 (same as wsIMU.loop())
-    if (imuFrameReady && imuClientConnected.load()) {
-        imuFrameReady = false;
-        wsIMU.broadcastTXT(imuJsonBuf);
-    }
-
-    handleHTTP();
-
-    // FIX #5: spawn WAV write task if pending (non-blocking)
-    tfMaybeWriteWAV();
-
-    unsigned long now = millis();
-    if (lastLvglTick == 0) lastLvglTick = now;
-    if (lcdOk) {
-        lv_tick_inc(now - lastLvglTick);
-        lastLvglTick = now;
-    }
-
-    powerButtonLoop(now);
-
-    if (lcdOk && !splashShown && now >= splashUntil) {
-        splashShown = true;
-        if (uiSplash) lv_obj_add_flag(uiSplash, LV_OBJ_FLAG_HIDDEN);
-        if (uiMain)   lv_obj_clear_flag(uiMain,  LV_OBJ_FLAG_HIDDEN);
-        lv_timer_handler();
-    }
-
-    if (lcdOk && splashShown && (now - lastLcdUpdate >= 100)) {
-        // FIX #25: imuWriteIdx must be read inside the mutex to get the
-        // core 1 memory barrier -- reading it outside risks a stale cached value.
-        xSemaphoreTake(imuMutex, portMAX_DELAY);
-        uint8_t ri = imuWriteIdx;          // read index under mutex
-        latestImu  = imuBuf[ri];
-        xSemaphoreGive(imuMutex);
-        lcdUpdateIMU(latestImu);
-        lastLcdUpdate = now;
-    }
-
-    if (lcdOk) lv_timer_handler();
-    delay(1);
-}
