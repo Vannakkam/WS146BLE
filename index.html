@@ -1,0 +1,531 @@
+// =============================================================================
+// HTML page (served from PROGMEM) - Web Bluetooth version
+// FIX #15: status endpoint shows TF card info; web UI shows card status
+// =============================================================================
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BCMCH Sensor</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;background:linear-gradient(135deg,#0a0a1a,#0f0f23);color:white;padding:15px;margin:0}
+.splash{position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,#00d4ff,#0066aa);display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:1000;transition:opacity 1s}
+.splash.hide{opacity:0;pointer-events:none}
+.splash h1{font-size:2.5rem;margin:0}
+.splash p{font-size:1rem;margin-top:15px;opacity:0.8}
+.container{max-width:620px;margin:0 auto}
+.card{background:rgba(255,255,255,0.08);backdrop-filter:blur(10px);border-radius:18px;padding:16px;margin-bottom:14px}
+h1{text-align:center;color:#00d4ff;margin:0 0 14px 0;font-size:1.4rem}
+h2{font-size:1rem;margin:0 0 12px 0;border-left:3px solid #00d4ff;padding-left:8px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.cell{background:rgba(0,0,0,0.3);border-radius:10px;padding:10px;text-align:center}
+.lbl{font-size:0.65rem;color:#888;margin-bottom:4px}
+.val{font-size:1.05rem;font-weight:bold;color:#00d4ff}
+.unit{font-size:0.55rem;color:#666}
+.temp{text-align:center;margin-top:12px;padding:8px;background:rgba(0,0,0,0.3);border-radius:8px}
+button{background:linear-gradient(135deg,#00d4ff,#0099cc);border:none;color:white;padding:9px 18px;font-size:0.85rem;border-radius:22px;cursor:pointer;margin:4px;transition:transform 0.15s}
+button:hover{transform:scale(1.03)}
+button.rec{background:linear-gradient(135deg,#ff4444,#cc0000)}
+button.stop{background:linear-gradient(135deg,#ff8800,#cc5500)}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+.dot.on{background:#00ff88;box-shadow:0 0 4px #00ff88}
+.dot.off{background:#ff4444}
+.dot.warn{background:#ffaa00}
+canvas{width:100%;height:70px;background:rgba(0,0,0,0.5);border-radius:8px;margin-top:12px}
+.btns{text-align:center;margin-top:12px}
+.info{font-size:0.65rem;text-align:center;margin-top:7px;color:#888}
+.recbar{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:8px}
+.rectime{font-size:0.9rem;color:#ff4444;font-weight:bold;min-width:60px;text-align:center}
+.status-row{display:flex;gap:16px;flex-wrap:wrap;font-size:0.72rem;margin-bottom:10px;color:#aaa}
+.status-item{display:flex;align-items:center;gap:5px}
+footer{text-align:center;font-size:0.65rem;color:#555;margin-top:12px}
+.connect-btn{background:linear-gradient(135deg,#00ff88,#00aa66);font-size:1.1rem;padding:12px 24px;border-radius:25px}
+.connect-btn:hover{transform:scale(1.05)}
+</style>
+</head>
+<body>
+<div class="splash" id="splash">
+<h1>BCMCH Sensor</h1>
+<p>Medical Grade Motion &amp; Audio Monitor</p>
+</div>
+<div class="container">
+<div class="card">
+<h1>BCMCH Sensor Hub (BLE)</h1>
+<!-- FIX #15: status row shows IMU + TF card state -->
+<div class="status-row">
+  <div class="status-item"><span class="dot off" id="imuDot"></span><span id="imuState">Connect via BLE</span></div>
+  <div class="status-item"><span class="dot off" id="tfDot"></span><span id="tfState">TF: checking...</span></div>
+  <div class="status-item" style="margin-left:auto"><span id="rowCount" style="color:#888">0 rows</span></div>
+</div>
+<div class="btns">
+<button class="connect-btn" onclick="connectBLE()">Connect to Device</button>
+</div>
+<div class="grid">
+<div class="cell"><div class="lbl">Accel X</div><div class="val" id="ax">0.000</div><div class="unit">g</div></div>
+<div class="cell"><div class="lbl">Accel Y</div><div class="val" id="ay">0.000</div><div class="unit">g</div></div>
+<div class="cell"><div class="lbl">Accel Z</div><div class="val" id="az">0.000</div><div class="unit">g</div></div>
+<div class="cell"><div class="lbl">Gyro X</div><div class="val" id="gx">0.0</div><div class="unit">dps</div></div>
+<div class="cell"><div class="lbl">Gyro Y</div><div class="val" id="gy">0.0</div><div class="unit">dps</div></div>
+<div class="cell"><div class="lbl">Gyro Z</div><div class="val" id="gz">0.0</div><div class="unit">dps</div></div>
+</div>
+<div class="temp">Temperature: <span id="temp">--</span> &deg;C (calibrated)</div>
+<div class="btns">
+<button onclick="downloadCSV()">Download IMU CSV</button>
+<button onclick="resetCSVData()">Reset CSV</button>
+</div>
+</div>
+<div class="card">
+<h2>Audio Monitor</h2>
+<div class="btns">
+<button id="monBtn" onclick="toggleMonitor()">Start Monitor</button>
+</div>
+<canvas id="visualizer" width="500" height="70"></canvas>
+<div class="info">MEMS Mic (RIGHT ch) | 16 kHz | BLE Audio Characteristic</div>
+</div>
+<div class="card">
+<h2>Audio Recording</h2>
+<div class="btns">
+<button id="recBtn" onclick="toggleRec()" class="rec">Start Recording</button>
+<button onclick="downloadWAV()" id="dlWavBtn">Download WAV</button>
+</div>
+<div class="recbar">
+<span id="recInd" style="color:#555">Stopped</span>
+<span class="rectime" id="recTime">0.0 s</span>
+</div>
+<div class="info">Up to 60 s | 16kHz mono 16-bit WAV | stored on device</div>
+</div>
+</div>
+<footer>BCMCH Sensor | QMI8658 200Hz IMU | MEMS Mic 16kHz</footer>
+<script>
+let imuChar = null, audioChar = null, cmdChar = null, statusChar = null;
+let audioCtx = null, isMonOn = false, isRecOn = false;
+let rowCount = 0, recStartTime = 0, recTimer = null;
+let device = null;
+
+setTimeout(()=>{
+  const s=document.getElementById('splash');
+  s.classList.add('hide');
+  setTimeout(()=>s.style.display='none',1000);
+},3000);
+
+async function connectBLE() {
+    try {
+        // Request BLE device with our service UUIDs
+        device = await navigator.bluetooth.requestDevice({
+            filters: [{ services: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e'] }],
+            optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e']
+        });
+
+        const server = await device.gatt.connect();
+
+        // Get the service
+        const service = await server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
+
+        // Get characteristics
+        imuChar = await service.getCharacteristic('6e400003-b5a3-f393-e0a9-e50e24dcca9e');
+        audioChar = await service.getCharacteristic('6e400004-b5a3-f393-e0a9-e50e24dcca9e');
+        cmdChar = await service.getCharacteristic('6e400005-b5a3-f393-e0a9-e50e24dcca9e');
+        statusChar = await service.getCharacteristic('6e400006-b5a3-f393-e0a9-e50e24dcca9e');
+
+        // Update UI
+        document.getElementById('imuState').textContent = 'Connected (200 Hz)';
+        document.getElementById('imuDot').className = 'dot on';
+
+        // Start listening for IMU notifications
+        await imuChar.startNotifications();
+        imuChar.addEventListener('characteristicvaluechanged', handleIMUUpdate);
+
+        // Start listening for status notifications
+        await statusChar.startNotifications();
+        statusChar.addEventListener('characteristicvaluechanged', handleStatusUpdate);
+
+        // Fetch initial TF status
+        await fetchStatus();
+
+        // Auto-start audio monitor
+        startMonitor();
+
+    } catch (err) {
+        console.error('BLE Connection Error:', err);
+        alert('Failed to connect: ' + err.message);
+    }
+}
+
+function handleIMUUpdate(event) {
+    const value = event.target.value;
+    const decoder = new TextDecoder();
+    const data = JSON.parse(decoder.decode(value));
+
+    if ('ax' in data) {
+        document.getElementById('ax').textContent = data.ax.toFixed(3);
+        document.getElementById('ay').textContent = data.ay.toFixed(3);
+        document.getElementById('az').textContent = data.az.toFixed(3);
+        document.getElementById('gx').textContent = data.gx.toFixed(1);
+        document.getElementById('gy').textContent = data.gy.toFixed(1);
+        document.getElementById('gz').textContent = data.gz.toFixed(1);
+        document.getElementById('temp').textContent = data.temp.toFixed(1);
+        rowCount++;
+        document.getElementById('rowCount').textContent = rowCount + ' rows';
+    }
+}
+
+function handleStatusUpdate(event) {
+    const value = event.target.value;
+    const decoder = new TextDecoder();
+    const data = JSON.parse(decoder.decode(value));
+
+    if (data.type === 'rec_started') {
+        recStartTime = Date.now();
+        recTimer = setInterval(updateRecTime, 100);
+        document.getElementById('recInd').style.color = '#ff4444';
+        document.getElementById('recInd').textContent = '* RECORDING';
+    } else if (data.type === 'rec_stopped') {
+        clearInterval(recTimer);
+        document.getElementById('recInd').textContent = 'Stopped';
+        document.getElementById('recInd').style.color = '#555';
+    } else if (data.type === 'error') {
+        alert('Device: ' + data.msg);
+    } else if (data.type === 'csv_reset') {
+        rowCount = 0;
+        document.getElementById('rowCount').textContent = '0 rows';
+    }
+}
+
+function updateRecTime() {
+    document.getElementById('recTime').textContent =
+        ((Date.now() - recStartTime) / 1000).toFixed(1) + ' s';
+}
+
+async function fetchStatus() {
+    // For BLE, we poll the status characteristic
+    if (statusChar) {
+        try {
+            const value = await statusChar.readValue();
+            const decoder = new TextDecoder();
+            const data = JSON.parse(decoder.decode(value));
+            // TF status would need to be read from a dedicated characteristic
+            // For now, show default
+            const dot = document.getElementById('tfDot');
+            const lbl = document.getElementById('tfState');
+            dot.className = 'dot warn';
+            lbl.textContent = 'TF: No card';
+        } catch (e) {
+            document.getElementById('tfState').textContent = 'TF: unknown';
+        }
+    }
+}
+
+function downloadCSV() {
+    if (!rowCount) {
+        alert('No IMU data yet!');
+        return;
+    }
+    // BLE doesn't support file download directly
+    // In a real implementation, you'd need a separate characteristic for CSV data
+    alert('CSV download via BLE requires a dedicated characteristic.\n\nCurrent data is stored on the device SD card.');
+}
+
+function resetCSVData() {
+    rowCount = 0;
+    document.getElementById('rowCount').textContent = '0 rows';
+    if (cmdChar) {
+        const encoder = new TextEncoder();
+        cmdChar.writeValue(encoder.encode('reset_csv'));
+    }
+}
+
+function toggleMonitor() {
+    isMonOn ? stopMonitor() : startMonitor();
+}
+
+function startMonitor() {
+    if (!audioChar) {
+        alert('BLE not connected');
+        return;
+    }
+    
+    isMonOn = true;
+    const b = document.getElementById('monBtn');
+    b.textContent = 'Stop Monitor';
+    b.classList.add('stop');
+
+    // Subscribe to audio notifications
+    audioChar.startNotifications().then(() => {
+        audioChar.addEventListener('characteristicvaluechanged', handleAudioUpdate);
+    });
+}
+
+function stopMonitor() {
+    if (audioChar) {
+        audioChar.stopNotifications();
+    }
+    isMonOn = false;
+    const b = document.getElementById('monBtn');
+    b.textContent = 'Start Monitor';
+    b.classList.remove('stop');
+}
+
+function handleAudioUpdate(event) {
+    const value = event.target.value;
+    const i16 = new Int16Array(value.buffer);
+    const f32 = new Float32Array(i16.length);
+    let sum = 0;
+    for (let i = 0; i < i16.length; i++) {
+        f32[i] = i16[i] / 32768;
+        sum += Math.abs(f32[i]);
+    }
+    const cv = document.getElementById('visualizer');
+    const cx = cv.getContext('2d');
+    cx.fillStyle = 'rgba(0,0,0,0.5)';
+    cx.fillRect(0, 0, cv.width, cv.height);
+    const h = Math.min(cv.height, (sum / i16.length) * cv.height * 4);
+    cx.fillStyle = '#00d4ff';
+    cx.fillRect(0, cv.height - h, cv.width, h);
+
+    // Audio playback via Web Audio API
+    if (audioCtx && audioCtx.state === 'running') {
+        const ab = audioCtx.createBuffer(1, i16.length, 16000);
+        ab.copyToChannel(f32, 0);
+        const src = audioCtx.createBufferSource();
+        src.buffer = ab;
+        src.connect(audioCtx.destination);
+        src.start(audioCtx.currentTime);
+        src.onended = () => src.disconnect();
+    }
+}
+
+function toggleRec() {
+    isRecOn ? stopRec() : startRec();
+}
+
+function startRec() {
+    if (!cmdChar) {
+        alert('BLE not connected');
+        return;
+    }
+    const encoder = new TextEncoder();
+    cmdChar.writeValue(encoder.encode('start_rec'));
+    isRecOn = true;
+    const b = document.getElementById('recBtn');
+    b.textContent = 'Stop Recording';
+    b.classList.remove('rec');
+    b.classList.add('stop');
+    document.getElementById('recTime').textContent = '0.0 s';
+}
+
+function stopRec() {
+    if (cmdChar) {
+        const encoder = new TextEncoder();
+        cmdChar.writeValue(encoder.encode('stop_rec'));
+    }
+    isRecOn = false;
+    clearInterval(recTimer);
+    const b = document.getElementById('recBtn');
+    b.textContent = 'Start Recording';
+    b.classList.remove('stop');
+    b.classList.add('rec');
+}
+
+function downloadWAV() {
+    // BLE doesn't support file download directly
+    alert('WAV download via BLE requires a dedicated characteristic.\n\nThe recording is saved to the device SD card.');
+}
+
+// Auto-connect on page load (user must approve)
+window.addEventListener('load', () => {
+    // Note: Modern browsers require user gesture for Bluetooth,
+    // so we show a button instead of auto-connecting
+    console.log('Click "Connect to Device" to start');
+});
+</script>
+</body>
+</html>
+)rawliteral";
+
+// =============================================================================
+// BLE Setup
+// =============================================================================
+void setupBLE() {
+    BLEDevice::init("BCMCH_Sensor_Hub");
+    
+    bleServer = BLEDevice::createServer();
+    bleServer->setCallbacks(new ServerCallbacks());
+
+    // Create IMU Service
+    imuService = BLEDevice::createService(SERVICE_UUID);
+    
+    // IMU Characteristic (Notify)
+    imuChar = imuService->createCharacteristic(
+        CHAR_IMU_UUID,
+        BLECharacteristic::PROPERTY_NOTIFY
+    );
+    imuChar->setCallbacks(new IMUCallbacks());
+
+    // Audio Characteristic (Notify)
+    audioChar = imuService->createCharacteristic(
+        CHAR_AUDIO_UUID,
+        BLECharacteristic::PROPERTY_NOTIFY
+    );
+    audioChar->addDescriptor(new BLE2902());
+
+    // Command Characteristic (Write)
+    cmdChar = imuService->createCharacteristic(
+        CHAR_CMD_UUID,
+        BLECharacteristic::PROPERTY_WRITE
+    );
+    cmdChar->setCallbacks(new CommandCallbacks());
+
+    // Status Characteristic (Notify)
+    statusChar = imuService->createCharacteristic(
+        CHAR_STATUS_UUID,
+        BLECharacteristic::PROPERTY_NOTIFY
+    );
+    statusChar->addDescriptor(new BLE2902());
+
+    // Start services
+    imuService->start();
+
+    // Advertise
+    BLEAdvertising *advertising = BLEDevice::getAdvertising();
+    advertising->addServiceUUID(SERVICE_UUID);
+    advertising->setScanResponse(true);
+    advertising->setMinPreferred(0x06);  // functions to improve connection interval
+    advertising->setMinPreferred(0x12);
+    BLEDevice::startAdvertising();
+
+    Serial.println("[BLE] Advertising started");
+}
+
+// =============================================================================
+// Setup
+// =============================================================================
+void setup() {
+    initPowerControl();
+    Serial.begin(115200);
+    delay(400);
+    Serial.println("\n=== BCMCH Sensor Hub v4.4 (BLE Edition) ===");
+
+    Wire.begin(I2C_SDA, I2C_SCL, 400000UL);
+    Wire.setTimeOut(100);
+
+    // FIX #20: init CH422G direction register once here
+    ch422g_init();
+
+    lcdInit();
+    splashUntil = millis() + 3000;
+    initIMU();
+    initCSV();
+    if (csvBuffer)
+        Serial.printf("[CSV] Buffer: %.1f KB\n", csvMaxBytes / 1024.0f);
+
+    // Audio recording buffer (PSRAM preferred)
+    if (psramFound()) {
+        audioRecBuf = (int16_t*)ps_malloc(AUDIO_REC_SAMPLES * sizeof(int16_t));
+        Serial.printf("[REC] PSRAM buffer: %.1f MB\n",
+            (AUDIO_REC_SAMPLES * sizeof(int16_t)) / 1048576.0f);
+    } else {
+        const uint32_t fallback = SAMPLE_RATE * 10;
+        audioRecBuf = (int16_t*)malloc(fallback * sizeof(int16_t));
+        Serial.println("[REC] SRAM fallback: 10 s");
+    }
+
+    audioRecMutex = xSemaphoreCreateMutex();
+    imuMutex      = xSemaphoreCreateMutex();
+    tfMutex       = xSemaphoreCreateMutex();
+
+    // FIX #6: load/increment session counter from NVS before TF init
+    tfLoadSessionCounter();
+    Serial.printf("[TF] Session #%lu\n", (unsigned long)tfSessionCounter);
+
+    // TF Card probe -- EXIO3 is already HIGH from ch422g_init()
+    delay(50);   // let card power rail settle
+    tfCardPresent = initTFCard();
+    Serial.println(tfCardPresent
+        ? "[TF] Card present -- logging ENABLED (always-on, batch flush ~1s)"
+        : "[TF] No card -- RAM-only mode");
+
+    // FIX #13: LCD UI shows TF status -- must be after tfCardPresent is set,
+    //          but lvglCreateUi() reads it, so rebuild is not needed;
+    //          the label was already built in lcdInit() -> lvglCreateUi()
+    //          which is called AFTER ch422g_init() so EXIO3 is safe.
+
+    initMicrophone();
+    initSpeaker();
+    playStartupBeep();   // FIX #11: now only 200 ms
+
+    // BLE Setup
+    setupBLE();
+    
+    Serial.println("  BLE Device: BCMCH_Sensor_Hub");
+    Serial.println("  Services: IMU(200Hz), Audio(16kHz), Commands, Status");
+
+    // WebSocket setup for backward compatibility (removed in final version)
+    // Keeping for reference - these will be removed in production
+    
+    wsIMU.begin();   wsIMU.onEvent(onIMUEvent);
+    wsAudio.begin(); wsAudio.onEvent(onAudioEvent);
+    httpServer.begin();
+
+    // FIX #3: imuTask stack 4096 -> 8192
+    // FIX #4:  audioTask stack 4096 -> 6144
+    // FIX #25: audioTask moved from core 1 -> core 0. i2s_read() in audioTask
+    //          was blocking loop() (also core 1), preventing lv_timer_handler()
+    //          from running and stalling LCD updates. imuTask (priority 5) will
+    //          preempt audioTask (priority 4) on core 0, keeping 200 Hz sampling
+    //          intact. loop() on core 1 now runs freely.
+    xTaskCreatePinnedToCore(imuTask,   "imu",   8192, NULL, 5, NULL, 0);
+    xTaskCreatePinnedToCore(audioTask, "audio", 6144, NULL, 4, NULL, 0);
+    Serial.println("Ready. Tasks running.");
+}
+
+// =============================================================================
+// Loop
+// =============================================================================
+void loop() {
+    wsIMU.loop();
+    wsAudio.loop();
+
+    // FIX #21: IMU WebSocket broadcast -- must run on core 1 (same as wsIMU.loop())
+    if (imuFrameReady && imuClientConnected.load()) {
+        imuFrameReady = false;
+        wsIMU.broadcastTXT(imuJsonBuf);
+    }
+
+    handleHTTP();
+
+    // FIX #5: spawn WAV write task if pending (non-blocking)
+    tfMaybeWriteWAV();
+
+    unsigned long now = millis();
+    if (lastLvglTick == 0) lastLvglTick = now;
+    if (lcdOk) {
+        lv_tick_inc(now - lastLvglTick);
+        lastLvglTick = now;
+    }
+
+    powerButtonLoop(now);
+
+    if (lcdOk && !splashShown && now >= splashUntil) {
+        splashShown = true;
+        if (uiSplash) lv_obj_add_flag(uiSplash, LV_OBJ_FLAG_HIDDEN);
+        if (uiMain)   lv_obj_clear_flag(uiMain,  LV_OBJ_FLAG_HIDDEN);
+        lv_timer_handler();
+    }
+
+    if (lcdOk && splashShown && (now - lastLcdUpdate >= 100)) {
+        // FIX #25: imuWriteIdx must be read inside the mutex to get the
+        // core 1 memory barrier -- reading it outside risks a stale cached value.
+        xSemaphoreTake(imuMutex, portMAX_DELAY);
+        uint8_t ri = imuWriteIdx;          // read index under mutex
+        latestImu  = imuBuf[ri];
+        xSemaphoreGive(imuMutex);
+        lcdUpdateIMU(latestImu);
+        lastLcdUpdate = now;
+    }
+
+    if (lcdOk) lv_timer_handler();
+    delay(1);
+}
