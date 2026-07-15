@@ -70,6 +70,7 @@
     }
     .dot.connected { background: var(--success); }
     .dot.disconnected { background: var(--error); }
+    .dot.connecting { background: var(--warning); }
     .controls {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -77,7 +78,7 @@
       margin: 1.5rem 0;
     }
     button {
-      background: linear-gradient(135deg, var(--primary), #0099c8a9c);
+      background: linear-gradient(135deg, var(--primary), #0099cc);
       color: white;
       border: none;
       padding: 0.75rem 1.25rem;
@@ -143,6 +144,15 @@
       border-top: 1px solid rgba(255,255,255,0.1);
       font-size: 0.8rem;
       color: var(--text-muted);
+    }
+    .requirements-note {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-align: center;
+      margin-top: 1rem;
+      padding: 0.5rem;
+      background: rgba(255,255,255,0.02);
+      border-radius: 8px;
     }
   </style>
 </head>
@@ -217,6 +227,14 @@
 
     <div class="chart-container">
       <canvas id="imuChart"></canvas>
+    </div>
+
+    <div class="requirements-note">
+      Web Bluetooth requires:<br>
+      • Chrome/Edge on Android, Linux, macOS, or Windows<br>
+      • Desktop: Enable "Experimental Web Platform features" (chrome://flags/#enable-experimental-web-platform-features)<br>
+      • Must be served via HTTPS or localhost (not file://)<br>
+      • First click must be a user gesture (button press)
     </div>
 
     <footer>
@@ -360,13 +378,28 @@
       imuChart.update('none');
     }
 
-    // Connect to BLE device
+    // Connect to BLE device (requires user gesture)
     async function connectToDevice() {
-      try {
-        connectionDot.className = 'dot connecting';
-        connectBtn.textContent = 'Connecting...';
-        connectBtn.disabled = true;
+      // Critical: Check if Web Bluetooth is available
+      if (!navigator.bluetooth) {
+        alert('Web Bluetooth is not available in this browser.\\n\\n' +
+              'Requirements:\\n' +
+              ' - Chrome or Edge (Android, Linux, macOS, Windows)\\n' +
+              ' - On desktop: enable "Experimental Web Platform features" flag (chrome://flags/#enable-experimental-web-platform-features)\\n' +
+              ' - The page MUST be served over HTTPS or localhost (not file://)\\n' +
+              ' - This button click counts as the required user gesture');
+        connectionDot.className = 'dot disconnected';
+        connectBtn.textContent = 'Connect Device';
+        connectBtn.disabled = false;
+        return;
+      }
 
+      // Disable button during connection attempt
+      connectBtn.disabled = true;
+      connectBtn.textContent = 'Connecting...';
+      connectionDot.className = 'dot connecting';
+
+      try {
         // Request BLE device with our service
         bluetoothDevice = await navigator.bluetooth.requestDevice({
           filters: [{ services: [SERVICE_UUID] }],
@@ -399,7 +432,7 @@
         isConnected = true;
         updateUI();
         
-        // Request initial status
+        // Request initial status (optional - notifications will update UI)
         await readStatus();
         
       } catch (error) {
@@ -407,7 +440,45 @@
         connectionDot.className = 'dot disconnected';
         connectBtn.textContent = 'Connect Device';
         connectBtn.disabled = false;
-        alert('Connection failed: ' + error.message);
+        alert('Connection failed: ' + error.message + 
+              '\\n\\nTry:\\n1. Ensuring device is advertising\\n2. Refreshing page\\n3. Checking browser requirements');
+      }
+    }
+
+    // Read status (for initial load)
+    async function readStatus() {
+      if (!statusCharacteristic) return;
+      try {
+        const value = await statusCharacteristic.readValue();
+        const text = new TextDecoder().decode(value);
+        const status = JSON.parse(text);
+        // Update UI immediately
+        isRecording = status.rec === true;
+        recordingStatusEl.textContent = isRecording ? 'Recording' : 'Stopped';
+        recordingStatusEl.style.color = isRecording ? 'var(--error)' : 'var(--text-light)';
+        batteryStatusEl.textContent = (status.batMv / 1000).toFixed(2) + ' V';
+        batteryStatusEl.style.color = status.batLow ? 'var(--warning)' : 'var(--text-light)';
+        tfStatusEl.textContent = status.tfState;
+        tfStatusEl.style.color = 
+          status.tfState === 'FULL' ? 'var(--warning)' : 
+          status.tfState === 'OK' ? 'var(--success)' : 'var(--error)';
+      } catch (e) {
+        console.error('Failed to read status:', e);
+      }
+    }
+
+    // Send control command
+    async function sendCommand(command) {
+      if (!isConnected || !controlCharacteristic) {
+        alert('Device not connected');
+        return;
+      }
+      try {
+        await controlCharacteristic.writeValue(new TextEncoder().encode(command));
+        console.log('Sent command:', command);
+      } catch (error) {
+        console.error('Failed to send command:', error);
+        alert('Command failed: ' + error.message);
       }
     }
 
@@ -471,41 +542,16 @@
       }
     }
 
-    // Read status (for initial load)
-    async function readStatus() {
-      if (!statusCharacteristic) return;
-      try {
-        const value = await statusCharacteristic.readValue();
-        const text = new TextDecoder().decode(value);
-        const status = JSON.parse(text);
-        // Update UI immediately
-        isRecording = status.rec === true;
-        recordingStatusEl.textContent = isRecording ? 'Recording' : 'Stopped';
-        recordingStatusEl.style.color = isRecording ? 'var(--error)' : 'var(--text-light)';
-        batteryStatusEl.textContent = (status.batMv / 1000).toFixed(2) + ' V';
-        batteryStatusEl.style.color = status.batLow ? 'var(--warning)' : 'var(--text-light)';
-        tfStatusEl.textContent = status.tfState;
-        tfStatusEl.style.color = 
-          status.tfState === 'FULL' ? 'var(--warning)' : 
-          status.tfState === 'OK' ? 'var(--success)' : 'var(--error)';
-      } catch (e) {
-        console.error('Failed to read status:', e);
-      }
-    }
-
-    // Send control command
-    async function sendCommand(command) {
-      if (!isConnected || !controlCharacteristic) {
-        alert('Device not connected');
-        return;
-      }
-      try {
-        await controlCharacteristic.writeValue(new TextEncoder().encode(command));
-        console.log('Sent command:', command);
-      } catch (error) {
-        console.error('Failed to send command:', error);
-        alert('Command failed: ' + error.message);
-      }
+    // Handle disconnection
+    function onDisconnected() {
+      isConnected = false;
+      connectionDot.className = 'dot disconnected';
+      connectBtn.textContent = 'Connect Device';
+      connectBtn.disabled = false;
+      imuRateEl.textContent = '-- Hz';
+      recordingStatusEl.textContent = 'Disconnected';
+      recordingStatusEl.style.color = 'var(--text-muted)';
+      console.log('Device disconnected');
     }
 
     // Event Listeners
@@ -520,33 +566,14 @@
       }
     });
 
-    // Handle disconnection
-    function onDisconnected() {
-      isConnected = false;
-      connectionDot.className = 'dot disconnected';
-      connectBtn.textContent = 'Connect Device';
-      connectBtn.disabled = false;
-      imuRateEl.textContent = '-- Hz';
-      recordingStatusEl.textContent = 'Disconnected';
-      recordingStatusEl.style.color = 'var(--text-muted)';
-      console.log('Device disconnected');
-    }
-
-    // Initial UI update
-    function updateUI() {
-      if (isConnected) {
-        connectionDot.className.textContent = 'dot connected';
-        connectBtn.textContent = 'Connected';
-      } else {
-        connectionDot.className = 'dot disconnected';
-        connectBtn.textContent = 'Connect Device';
-        connectBtn.disabled = false;
-      }
-    }
-
     // Initialize
     initChart();
-    updateUI();
+    // Set initial state
+    connectionDot.className = 'dot disconnected';
+    recordingStatusEl.textContent = 'Stopped';
+    recordingStatusEl.style.color = 'var(--text-muted)';
+    batteryStatusEl.textContent = '-- V';
+    tfStatusEl.textContent = 'Checking...';
   </script>
 </body>
 </html>
