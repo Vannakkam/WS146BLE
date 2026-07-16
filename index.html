@@ -1,823 +1,558 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>BCMCH Sensor Hub (BLE/Web Bluetooth)</title>
-  <style>
-    :root {
-      --primary: #00d4ff;
-      --bg-dark: #0a0a1a;
-      --bg-darker: #05070b;
-      --text-light: #eaf7ff;
-      --text-muted: #888;
-      --success: #00ff88;
-      --warning: #ffaa00;
-      --error: #ff4444;
-      --border-radius: 12px;
-      --touch-size: 48px;
-      --font-sizes: (
-        'xs': 0.75rem,
-        'sm': 0.875rem,
-        'base': 1rem,
-        'lg': 1.125rem,
-        'xl': 1.25rem,
-        '2xl': 1.5rem,
-        '3xl': 1.875rem
-      );
-    }
-    
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-    
-    html {
-      font-size: 16px; /* Base for rem units */
-    }
-    
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: var(--bg-dark);
-      color: var(--text-light);
-      line-height: 1.6;
-      padding: 1rem;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-    
-    .container {
-      flex: 1;
-      max-width: 600px;
-      margin: 0 auto;
-      width: 100%;
-    }
-    
-    header {
-      text-align: center;
-      padding: 2rem 0 1.5rem;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-    }
-    
-    h1 {
-      font-size: clamp(1.8rem, 5vw, 2.5rem);
-      color: var(--primary);
-      margin-bottom: 0.5rem;
-      letter-spacing: -0.5px;
-    }
-    
-    .status-bar {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-      gap: 1rem;
-      margin: 1.5rem 0;
-      padding: 1.25rem;
-      background: rgba(255,255,255,0.05);
-      border-radius: var(--border-radius);
-    }
-    
-    .status-item {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-      min-height: 80px;
-    }
-    
-    .status-label {
-      font-size: 0.85rem;
-      color: var(--text-muted);
-      margin-bottom: 0.3rem;
-      line-height: 1.2;
-    }
-    
-    .status-value {
-      font-size: clamp(1.1rem, 4vw, 1.4rem);
-      font-weight: 600;
-      min-width: 60px;
-      word-break: break-all;
-    }
-    
-    .dot {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: var(--touch-size);
-      height: var(--touch-size);
-      border-radius: 50%;
-      margin: 0 auto 0.5rem;
-      font-size: 0.75rem;
-      font-weight: 600;
-    }
-    
-    .dot.connected { 
-      background: var(--success); 
-      color: var(--bg-dark);
-    }
-    .dot.disconnected { 
-      background: var(--error); 
-      color: var(--text-light);
-    }
-    .dot.connecting { 
-      background: var(--warning); 
-      color: var(--bg-dark);
-    }
-    
-    .controls {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(var(--touch-size), 1fr));
-      gap: 0.75rem;
-      margin: 1.5rem 0;
-    }
-    
-    button {
-      background: linear-gradient(135deg, var(--primary), #0099cc);
-      color: white;
-      border: none;
-      padding: 0.85rem 1rem;
-      font-size: 1rem;
-      font-weight: 600;
-      border-radius: var(--border-radius);
-      cursor: pointer;
-      transition: all 0.2s ease;
-      position: relative;
-      overflow: hidden;
-      min-height: var(--touch-size);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-    }
-    
-    button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 16px rgba(0, 212, 255, 0.35);
-    }
-    
-    button:active {
-      transform: translateY(0);
-    }
-    
-    button::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255,255,255,0.2),
-        transparent
-      );
-      transition: 0.5s;
-    }
-    
-    button:hover::before {
-      left: 100%;
-    }
-    
-    button.recording {
-      background: linear-gradient(135deg, var(--error), #cc0000);
-    }
-    
-    button.recording:hover {
-      box-shadow: 0 6px 16px rgba(255, 68, 68, 0.35);
-    }
-    
-    .data-panel {
-      background: rgba(255,255,255,0.03);
-      border-radius: var(--border-radius);
-      padding: 1.5rem;
-      margin: 1.5rem 0;
-    }
-    
-    .data-row {
-      display: flex;
-      justify-content: space-between;
-      padding: 1rem 0;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
-      align-items: center;
-    }
-    
-    .data-row:last-child {
-      border-bottom: none;
-    }
-    
-    .data-label {
-      font-size: 0.95rem;
-      color: var(--text-muted);
-      flex: 1;
-      min-width: 100px;
-    }
-    
-    .data-value {
-      font-size: 1.1rem;
-      font-family: 'Courier New', monospace;
-      font-weight: 600;
-      text-align: right;
-      flex: 1;
-      min-width: 100px;
-    }
-    
-    .chart-container {
-      height: clamp(180px, 25vh, 220px);
-      background: rgba(0,0,0,0.3);
-      border-radius: var(--border-radius);
-      margin: 1.5rem 0;
-      position: relative;
-      overflow: hidden;
-    }
-    
-    #imuChart {
-      width: 100%;
-      height: 100%;
-      display: block;
-    }
-    
-    .requirements-note {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      text-align: center;
-      margin-top: auto;
-      padding: 1rem;
-      background: rgba(255,255,255,0.02);
-      border-radius: var(--border-radius);
-      line-height: 1.4;
-    }
-    
-    footer {
-      text-align: center;
-      margin-top: auto;
-      padding-top: 1.5rem;
-      border-top: 1px solid rgba(255,255,255,0.1);
-      font-size: 0.85rem;
-      color: var(--text-muted);
-    }
-    
-    /* Mobile-specific enhancements */
-    @media (max-width: 480px) {
-      :root {
-        --touch-size: 56px;
-        --border-radius: 16px;
-      }
-      
-      body {
-        padding: 0.75rem;
-      }
-      
-      header {
-        padding: 1.5rem 0 1rem;
-      }
-      
-      h1 {
-        font-size: clamp(1.6rem, 6vw, 2.2rem);
-      }
-      
-      .status-bar {
-        grid-template-columns: 1fr;
-        gap: 1.25rem;
-        padding: 1.5rem;
-      }
-      
-      .status-item {
-        min-height: 90px;
-      }
-      
-      .status-label {
-        font-size: 0.9rem;
-      }
-      
-      .status-value {
-        font-size: clamp(1.2rem, 5vw, 1.5rem);
-      }
-      
-      .dot {
-        width: var(--touch-size);
-        height: var(--touch-size);
-        margin-bottom: 0.4rem;
-      }
-      
-      .controls {
-        grid-template-columns: 1fr;
-        gap: 1rem;
-      }
-      
-      button {
-        padding: 1rem;
-        font-size: 1.1rem;
-      }
-      
-      .data-panel {
-        padding: 1.25rem;
-      }
-      
-      .data-row {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.5rem;
-        padding: 0.75rem 0;
-      }
-      
-      .data-label {
-        min-width: unset;
-        margin-bottom: 0.25rem;
-      }
-      
-      .data-value {
-        text-align: left;
-        min-width: unset;
-        width: 100%;
-      }
-      
-      .chart-container {
-        height: clamp(200px, 30vh, 250px);
-      }
-      
-      .requirements-note {
-        font-size: 0.85rem;
-        padding: 1.25rem;
-      }
-      
-      footer {
-        font-size: 0.9rem;
-        padding-top: 1.25rem;
-      }
-    }
-    
-    /* Accessibility enhancements */
-    @media (prefers-reduced-motion: reduce) {
-      * {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-      }
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BCMCH Sensor — BLE</title>
+<style>
+:root{
+  --bg:#070b12;
+  --panel:rgba(255,255,255,0.045);
+  --panel-line:rgba(255,255,255,0.08);
+  --cyan:#00d4ff;
+  --cyan-dim:#0a4c66;
+  --amber:#ffb35c;
+  --red:#ff5a5a;
+  --green:#3ee08a;
+  --text:#eaf3f7;
+  --text-dim:#7f92a0;
+  --mono:'SF Mono','JetBrains Mono',ui-monospace,Consolas,monospace;
+  --sans:'Inter','Segoe UI',system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;font-family:var(--sans);background:
+    radial-gradient(ellipse 900px 500px at 50% -10%, #0e2233 0%, transparent 60%),
+    var(--bg);
+  color:var(--text);padding:22px 16px 60px;min-height:100vh;
+}
+.wrap{max-width:640px;margin:0 auto}
+
+/* header / connect bar */
+.hero{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:22px}
+.hero h1{font-size:1.05rem;letter-spacing:.14em;text-transform:uppercase;font-weight:600;margin:0;color:var(--text)}
+.hero .sub{font-size:.7rem;color:var(--text-dim);margin-top:3px;letter-spacing:.03em}
+.btn{
+  appearance:none;border:1px solid var(--cyan-dim);background:transparent;color:var(--cyan);
+  padding:10px 18px;font-size:.8rem;font-weight:600;letter-spacing:.04em;border-radius:999px;
+  cursor:pointer;transition:.15s ease;white-space:nowrap;
+}
+.btn:hover{background:rgba(0,212,255,0.1)}
+.btn:active{transform:scale(0.97)}
+.btn.solid{background:var(--cyan);color:#03151d;border-color:var(--cyan)}
+.btn.solid:hover{background:#33dfff}
+.btn.danger{border-color:#5c2020;color:var(--red)}
+.btn.danger:hover{background:rgba(255,90,90,0.1)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn.small{padding:7px 13px;font-size:.7rem}
+
+/* connection pulse */
+.pulse{width:9px;height:9px;border-radius:50%;background:#3a4650;flex-shrink:0;position:relative}
+.pulse.live{background:var(--green)}
+.pulse.live::after{
+  content:'';position:absolute;inset:-4px;border-radius:50%;border:1px solid var(--green);
+  animation:ring 1.8s ease-out infinite;
+}
+@keyframes ring{0%{opacity:.8;transform:scale(.6)}100%{opacity:0;transform:scale(1.8)}}
+
+.statusline{display:flex;align-items:center;gap:8px;font-size:.72rem;color:var(--text-dim);margin-bottom:18px}
+
+/* panels */
+.panel{
+  background:var(--panel);border:1px solid var(--panel-line);border-radius:16px;
+  padding:18px 18px 20px;margin-bottom:14px;
+}
+.panel h2{
+  font-size:.68rem;text-transform:uppercase;letter-spacing:.12em;color:var(--text-dim);
+  margin:0 0 14px;font-weight:600;display:flex;align-items:center;justify-content:space-between;
+}
+
+/* imu grid */
+.grid6{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.cell{background:rgba(0,0,0,0.28);border-radius:10px;padding:11px 8px;text-align:center;border:1px solid transparent}
+.cell.updated{border-color:rgba(0,212,255,0.4)}
+.cell .lbl{font-size:.62rem;color:var(--text-dim);letter-spacing:.06em}
+.cell .val{font-family:var(--mono);font-size:1.15rem;font-weight:600;color:var(--cyan);margin-top:3px}
+.cell .unit{font-size:.55rem;color:#516170;margin-top:1px}
+
+canvas{width:100%;height:64px;background:rgba(0,0,0,0.32);border-radius:10px;margin-top:12px;display:block}
+
+.temp-row{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:.78rem;color:var(--text-dim)}
+.temp-row b{color:var(--amber);font-family:var(--mono);font-weight:600}
+
+/* status rows */
+.kv{display:grid;grid-template-columns:1fr auto;gap:8px 12px;font-size:.78rem}
+.kv .k{color:var(--text-dim)}
+.kv .v{font-family:var(--mono);text-align:right}
+.v.ok{color:var(--green)}
+.v.warn{color:var(--amber)}
+.v.bad{color:var(--red)}
+
+/* time sync */
+.timebar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.clock{font-family:var(--mono);font-size:1.3rem;color:var(--text)}
+.clock .zone{font-size:.65rem;color:var(--text-dim);font-family:var(--sans);display:block;margin-top:2px}
+
+/* transfer / progress */
+.progress-track{height:6px;border-radius:999px;background:rgba(255,255,255,0.08);overflow:hidden;margin-top:10px}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--cyan),#33dfff);width:0%;transition:width .12s linear}
+.xfer-meta{display:flex;justify-content:space-between;font-size:.68rem;color:var(--text-dim);margin-top:6px;font-family:var(--mono)}
+
+.rec-row{display:flex;align-items:center;gap:12px}
+.rec-dot{width:8px;height:8px;border-radius:50%;background:#3a4650}
+.rec-dot.on{background:var(--red);box-shadow:0 0 8px rgba(255,90,90,.7);animation:blink 1s ease-in-out infinite}
+@keyframes blink{50%{opacity:.35}}
+.rec-time{font-family:var(--mono);font-size:.85rem;color:var(--text-dim);margin-left:auto}
+
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+
+.note{font-size:.68rem;color:var(--text-dim);line-height:1.5;margin-top:4px}
+.note a{color:var(--cyan)}
+
+.toast{
+  position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(20px);
+  background:#101823;border:1px solid var(--panel-line);color:var(--text);
+  padding:11px 18px;border-radius:12px;font-size:.78rem;opacity:0;pointer-events:none;
+  transition:.25s ease;box-shadow:0 8px 30px rgba(0,0,0,.5);max-width:88%;text-align:center;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.err{border-color:#5c2020;color:#ffb0b0}
+
+footer{text-align:center;font-size:.65rem;color:#3f4b56;margin-top:26px;letter-spacing:.04em}
+</style>
 </head>
 <body>
-  <div class="container">
-    <header>
+<div class="wrap">
+
+  <div class="hero">
+    <div>
       <h1>BCMCH Sensor Hub</h1>
-      <p>Medical Grade Motion & Audio Monitor</p>
-    </header>
-
-    <div class="status-bar">
-      <div class="status-item">
-        <div class="dot" id="connectionDot"></div>
-        <div class="status-label">Connection</div>
-      </div>
-      <div class="status-item">
-        <div class="status-value" id="imuRate">-- Hz</div>
-        <div class="status-label">IMU Rate</div>
-      </div>
-      <div class="status-item">
-        <div class="status-value" id="recordingStatus">Stopped</div>
-        <div class="status-label">Recording</div>
-      </div>
-      <div class="status-item">
-        <div class="status-value" id="batteryStatus">-- V</div>
-        <div class="status-label">Battery</div>
-      </div>
-      <div class="status-item">
-        <div class="status-value" id="tfStatus">Checking...</div>
-        <div class="status-label">TF Card</div>
-      </div>
+      <div class="sub">Motion Monitor · Web Bluetooth</div>
     </div>
-
-    <div class="controls">
-      <button id="connectBtn">Connect Device</button>
-      <button id="startRecBtn">Start Recording</button>
-      <button id="stopRecBtn">Stop Recording</button>
-      <button id="resetCsvBtn">Reset CSV</button>
-      <button id="setTimeBtn">Set Time</button>
-    </div>
-
-    <div class="data-panel">
-      <div class="data-row">
-        <div class="data-label">Accel X (g)</div>
-        <div class="data-value" id="accelX">0.000</div>
-      </div>
-      <div class="data-row">
-        <div class="data-label">Accel Y (g)</div>
-        <div class="data-value" id="accelY">0.000</div>
-      </div>
-      <div class="data-row">
-        <div class="data-label">Accel Z (g)</div>
-        <div class="data-value" id="accelZ">0.000</div>
-      </div>
-      <div class="data-row">
-        <div class="data-label">Gyro X (dps)</div>
-        <div class="data-value" id="gyroX">0.0</div>
-      </div>
-      <div class="data-row">
-        <div class="data-label">Gyro Y (dps)</div>
-        <div class="data-value" id="gyroY">0.0</div>
-      </div>
-      <div class="data-row">
-        <div class="data-label">Gyro Z (dps)</div>
-        <div class="data-value" id="gyroZ">0.0</div>
-      </div>
-      <div class="data-row">
-        <div class="data-label">Temperature (°C)</div>
-        <div class="data-value" id="temperature">--</div>
-      </div>
-    </div>
-
-    <div class="chart-container">
-      <canvas id="imuChart"></canvas>
-    </div>
-
-    <div class="requirements-note">
-      Web Bluetooth requires:<br>
-      • Chrome/Edge on Android, Linux, macOS, or Windows<br>
-      • Desktop: Enable "Experimental Web Platform features" (chrome://flags/#enable-experimental-web-platform-features)<br>
-      • Must be served via HTTPS or localhost (not file://)<br>
-      • First click must be a user gesture (button press)
-    </div>
-
-    <footer>
-      BCMCH Sensor Hub v4.6.0-BLE | BLE Peripheral | Web Bluetooth Compatible
-    </footer>
+    <button class="btn solid" id="btnConnect">Connect</button>
   </div>
 
-  <script>
-    // BLE UUIDs (must match Arduino sketch)
-    const SERVICE_UUID = "19b10000-e8f2-537e-4f6c-d104768a1214";
-    const IMU_CHAR_UUID = "19b10001-e8f2-537e-4f6c-d104768a1214";
-    const CONTROL_CHAR_UUID = "19b10002-e8f2-537e-4f6c-d104768a1214";
-    const STATUS_CHAR_UUID = "19b10003-e8f2-537e-4f6c-d104768a1214";
+  <div class="statusline">
+    <span class="pulse" id="pulse"></span>
+    <span id="connState">Not connected</span>
+  </div>
 
-    let bluetoothDevice = null;
-    let server = null;
-    let imuCharacteristic = null;
-    let controlCharacteristic = null;
-    let statusCharacteristic = null;
-    let isConnected = false;
-    let isRecording = false;
-    let imuData = { ax: 0, ay: 0, az: 0, gx: 0, gy: 0, gz: 0, temp: 0 };
-    let lastImuTime = 0;
-    let imuChart = null;
-    let imuHistory = {
-      timestamps: [],
-      accel: { x: [], y: [], z: [] },
-      gyro: { x: [], y: [], z: [] }
-    };
-    const HISTORY_LENGTH = 50; // Show last 50 samples
+  <!-- Time sync -->
+  <div class="panel">
+    <h2>Device Time</h2>
+    <div class="timebar">
+      <div>
+        <div class="clock" id="deviceClock">--:--:--</div>
+        <span class="zone" id="clockMeta">not synced this session</span>
+      </div>
+      <button class="btn small" id="btnSyncTime" disabled>Sync to phone/PC time</button>
+    </div>
+    <div class="note">Writes the current time as epoch milliseconds to the device. IMU samples are timestamped with this value going forward, so recordings carry real wall-clock time instead of an uptime counter.</div>
+  </div>
 
-    // DOM Elements
-    const connectBtn = document.getElementById('connectBtn');
-    const startRecBtn = document.getElementById('startRecBtn');
-    const stopRecBtn = document.getElementById('stopRecBtn');
-    const resetCsvBtn = document.getElementById('resetCsvBtn');
-    const setTimeBtn = document.getElementById('setTimeBtn');
-    const connectionDot = document.getElementById('connectionDot');
-    const imuRateEl = document.getElementById('imuRate');
-    const recordingStatusEl = document.getElementById('recordingStatus');
-    const batteryStatusEl = document.getElementById('batteryStatus');
-    const tfStatusEl = document.getElementById('tfStatus');
-    const accelXEl = document.getElementById('accelX');
-    const accelYEl = document.getElementById('accelY');
-    const accelZEl = document.getElementById('accelZ');
-    const gyroXEl = document.getElementById('gyroX');
-    const gyroYEl = document.getElementById('gyroY');
-    const gyroZEl = document.getElementById('gyroZ');
-    const tempEl = document.getElementById('temperature');
+  <!-- IMU -->
+  <div class="panel">
+    <h2>
+      <span>Live IMU</span>
+      <span id="imuRate" style="font-family:var(--mono);text-transform:none;letter-spacing:0;color:var(--text-dim)">-- Hz</span>
+    </h2>
+    <div class="grid6">
+      <div class="cell" id="cellAx"><div class="lbl">ACCEL X</div><div class="val" id="ax">0.000</div><div class="unit">g</div></div>
+      <div class="cell" id="cellAy"><div class="lbl">ACCEL Y</div><div class="val" id="ay">0.000</div><div class="unit">g</div></div>
+      <div class="cell" id="cellAz"><div class="lbl">ACCEL Z</div><div class="val" id="az">0.000</div><div class="unit">g</div></div>
+      <div class="cell" id="cellGx"><div class="lbl">GYRO X</div><div class="val" id="gx">0.0</div><div class="unit">dps</div></div>
+      <div class="cell" id="cellGy"><div class="lbl">GYRO Y</div><div class="val" id="gy">0.0</div><div class="unit">dps</div></div>
+      <div class="cell" id="cellGz"><div class="lbl">GYRO Z</div><div class="val" id="gz">0.0</div><div class="unit">dps</div></div>
+    </div>
+    <canvas id="accelChart" width="600" height="64"></canvas>
+    <div class="temp-row"><span>IMU temperature</span><b id="temp">-- °C</b></div>
+  </div>
 
-    // Initialize chart with mobile-optimized settings
-    function initChart() {
-      const ctx = document.getElementById('imuChart').getContext('2d');
-      imuChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: [],
-          datasets: [
-            {
-              label: 'Accel X',
-              data: [],
-              borderColor: 'rgba(0, 212, 255, 0.8)',
-              backgroundColor: 'rgba(0, 212, 255, 0.15)',
-              tension: 0.3,
-              fill: true,
-              borderWidth: 2.5,
-              pointRadius: 0,
-              pointHoverRadius: 4
-            },
-            {
-              label: 'Accel Y',
-              data: [],
-              borderColor: 'rgba(255, 165, 0, 0.8)',
-              backgroundColor: 'rgba(255, 165, 0, 0.15)',
-              tension: 0.3,
-              fill: true,
-              borderWidth: 2.5,
-              pointRadius: 0,
-              pointHoverRadius: 4
-            },
-            {
-              label: 'Accel Z',
-              data: [],
-              borderColor: 'rgba(255, 68, 68, 0.8)',
-              backgroundColor: 'rgba(255, 68, 68, 0.15)',
-              tension: 0.3,
-              fill: true,
-              borderWidth: 2.5,
-              pointRadius: 0,
-              pointHoverRadius: 4
-            }
-          ]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          animation: false,
-          interaction: {
-            mode: 'nearest',
-            axis: 'x',
-            intersect: false
-          },
-          plugins: {
-            tooltip: {
-              enabled: true,
-              backgroundColor: 'rgba(0,0,0,0.8)',
-              titleColor: '#fff',
-              bodyColor: '#fff',
-              borderColor: 'rgba(255,255,255,0.2)',
-              borderWidth: 1,
-              cornerRadius: 4,
-              padding: 8,
-              displayColors: false,
-              callbacks: {
-                label: function(context) {
-                  let label = context.dataset.label || '';
-                  if (label) {
-                    label += ': ';
-                  }
-                  if (context.parsed.y !== null) {
-                    label += context.parsed.y.toFixed(3) + ' ' + 
-                      (context.dataset.label.includes('Accel') ? 'g' : 
-                       context.dataset.label.includes('Gyro') ? 'dps' : '');
-                  }
-                  return label;
-                }
-              }
-            },
-            legend: {
-              display: false
-            }
-          },
-          scales: {
-            y: {
-              beginAtZero: false,
-              grid: {
-                color: 'rgba(255,255,255,0.1)',
-                drawBorder: false
-              },
-              ticks: {
-                color: '#ccc',
-                font: {
-                  size: 10
-                },
-                padding: 4
-              }
-            },
-            x: {
-              display: false,
-              grid: {
-                drawBorder: false
-              }
-            }
-          }
-        }
-      });
-    }
+  <!-- Status -->
+  <div class="panel">
+    <h2>
+      <span>Device Status</span>
+      <button class="btn small" id="btnRefresh" disabled>Refresh</button>
+    </h2>
+    <div class="kv">
+      <div class="k">TF card</div><div class="v" id="stTf">--</div>
+      <div class="k">CSV rows buffered</div><div class="v" id="stRows">--</div>
+      <div class="k">RTC</div><div class="v" id="stRtc">--</div>
+      <div class="k">Battery</div><div class="v" id="stBat">--</div>
+    </div>
+  </div>
 
-    // Update chart with new IMU data
-    function updateChart() {
-      const now = Date.now();
-      imuHistory.timestamps.push(now);
-      imuHistory.accel.x.push(imuData.ax);
-      imuHistory.accel.y.push(imuData.ay);
-      imuHistory.accel.z.push(imuData.az);
+  <!-- CSV transfer -->
+  <div class="panel">
+    <h2>IMU CSV Log</h2>
+    <div class="actions">
+      <button class="btn" id="btnDownloadCsv" disabled>Download CSV</button>
+      <button class="btn danger" id="btnResetCsv" disabled>Reset buffer</button>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="xferFill"></div></div>
+    <div class="xfer-meta"><span id="xferStatus">idle</span><span id="xferBytes"></span></div>
+    <div class="note">Pulled over BLE in small chunks, so a full 4&nbsp;MB buffer can take a couple of minutes. The IMU stream above keeps updating while it downloads.</div>
+  </div>
 
-      // Keep only last N samples
-      if (imuHistory.timestamps.length > HISTORY_LENGTH) {
-        imuHistory.timestamps.shift();
-        imuHistory.accel.x.shift();
-        imuHistory.accel.y.shift();
-        imuHistory.accel.z.shift();
-      }
+  <!-- Audio recording -->
+  <div class="panel">
+    <h2>Audio Recording</h2>
+    <div class="rec-row">
+      <span class="rec-dot" id="recDot"></span>
+      <span id="recLabel">Stopped</span>
+      <span class="rec-time" id="recTime">0.0 s</span>
+    </div>
+    <div class="actions">
+      <button class="btn" id="btnRec" disabled>Start Recording</button>
+    </div>
+    <div class="note">Saved as a WAV file on the device's TF card (up to 60&nbsp;s, 16&nbsp;kHz mono). Live network audio monitoring was removed in the BLE firmware — it needs more bandwidth than a BLE link comfortably provides — so pull the file from the TF card. See the firmware's v5.0.0 changelog (B4) for the reasoning.</div>
+  </div>
 
-      // Update chart data
-      imuChart.data.labels = imuHistory.timestamps.map(t => 
-        new Date(t - imuHistory.timestamps[0]).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
-      );
-      imuChart.data.datasets[0].data = imuHistory.accel.x;
-      imuChart.data.datasets[1].data = imuHistory.accel.y;
-      imuChart.data.datasets[2].data = imuHistory.accel.z;
-      
-      imuChart.update('none');
-    }
+  <footer>BCMCH Sensor v5.0.0 (BLE) · QMI8658 200&nbsp;Hz · PCF85063 RTC · Web Bluetooth requires Chrome/Edge on desktop or Android</footer>
+</div>
 
-    // Connect to BLE device (requires user gesture)
-    async function connectToDevice() {
-      // Critical: Check if Web Bluetooth is available
-      if (!navigator.bluetooth) {
-        alert('Web Bluetooth is not available in this browser.\\n\\n' +
-              'Requirements:\\n' +
-              ' - Chrome or Edge (Android, Linux, macOS, Windows)\\n' +
-              ' - On desktop: enable "Experimental Web Platform features" flag (chrome://flags/#enable-experimental-web-platform-features)\\n' +
-              ' - The page MUST be served over HTTPS or localhost (not file://)\\n' +
-              ' - This button click counts as the required user gesture');
-        connectionDot.className = 'dot disconnected';
-        connectBtn.textContent = 'Connect Device';
-        connectBtn.disabled = false;
-        return;
-      }
+<div class="toast" id="toast"></div>
 
-      // Disable button during connection attempt
-      connectBtn.disabled = true;
-      connectBtn.textContent = 'Connecting...';
-      connectionDot.className = 'dot connecting';
+<script>
+// =============================================================================
+// GATT UUIDs -- must match the firmware's #defines exactly
+// =============================================================================
+const SERVICE_UUID    = '6f2a0000-9b1e-4c7a-8b2a-9f7e6a2b0000';
+const CHAR_IMU        = '6f2a0001-9b1e-4c7a-8b2a-9f7e6a2b0000'; // notify, JSON
+const CHAR_CMD        = '6f2a0002-9b1e-4c7a-8b2a-9f7e6a2b0000'; // write, text
+const CHAR_STATUS     = '6f2a0003-9b1e-4c7a-8b2a-9f7e6a2b0000'; // read, JSON
+const CHAR_TIME       = '6f2a0004-9b1e-4c7a-8b2a-9f7e6a2b0000'; // write, 8B epoch-ms
+const CHAR_XFER_CTRL  = '6f2a0005-9b1e-4c7a-8b2a-9f7e6a2b0000'; // write, 1B cmd
+const CHAR_XFER_DATA  = '6f2a0006-9b1e-4c7a-8b2a-9f7e6a2b0000'; // notify, bytes
+const CHAR_XFER_INFO  = '6f2a0007-9b1e-4c7a-8b2a-9f7e6a2b0000'; // read, 4B LE total
 
-      try {
-        // Request BLE device with our service
-        bluetoothDevice = await navigator.bluetooth.requestDevice({
-          filters: [{ services: [SERVICE_UUID] }],
-          optionalServices: [SERVICE_UUID]
-        });
+let device=null, server=null, svc=null;
+let chImu=null, chCmd=null, chStatus=null, chTime=null, chXferCtrl=null, chXferData=null, chXferInfo=null;
 
-        // Handle disconnection
-        bluetoothDevice.addEventListener('gattserverdisconnected', onDisconnected);
+let sampleTimes=[], sampleCount=0, lastRateCalc=Date.now();
+let accelHistory=[]; // rolling buffer for the chart
+let isRecOn=false, recStartTime=0, recTimer=null;
+let xferChunks=[], xferReceived=0, xferTotal=0, xferActive=false;
 
-        // Connect to GATT Server
-        server = await bluetoothDevice.gatt.connect();
-        connectionDot.className = 'dot connected';
-        connectBtn.textContent = 'Connected';
-        
-        // Get service
-        const service = await server.getPrimaryService(SERVICE_UUID);
-        
-        // Get characteristics
-        imuCharacteristic = await service.getCharacteristic(IMU_CHAR_UUID);
-        controlCharacteristic = await service.getCharacteristic(CONTROL_CHAR_UUID);
-        statusCharacteristic = await service.getCharacteristic(STATUS_CHAR_UUID);
-        
-        // Start notifications
-        await imuCharacteristic.startNotifications();
-        imuCharacteristic.addEventListener('characteristicvaluechanged', handleImuNotification);
-        
-        await statusCharacteristic.startNotifications();
-        statusCharacteristic.addEventListener('characteristicvaluechanged', handleStatusNotification);
-        
-        isConnected = true;
-        updateUI();
-        
-        // Request initial status (optional - notifications will update UI)
-        await readStatus();
-        
-      } catch (error) {
-        console.error('BLE Error:', error);
-        connectionDot.className = 'dot disconnected';
-        connectBtn.textContent = 'Connect Device';
-        connectBtn.disabled = false;
-        alert('Connection failed: ' + error.message + 
-              '\\n\\nTry:\\n1. Ensuring device is advertising\\n2. Refreshing page\\n3. Checking browser requirements');
-      }
-    }
+const $=id=>document.getElementById(id);
 
-    // Read status (for initial load)
-    async function readStatus() {
-      if (!statusCharacteristic) return;
-      try {
-        const value = await statusCharacteristic.readValue();
-        const text = new TextDecoder().decode(value);
-        const status = JSON.parse(text);
-        // Update UI immediately
-        isRecording = status.rec === true;
-        recordingStatusEl.textContent = isRecording ? 'Recording' : 'Stopped';
-        recordingStatusEl.style.color = isRecording ? 'var(--error)' : 'var(--text-light)';
-        batteryStatusEl.textContent = (status.batMv / 1000).toFixed(2) + ' V';
-        batteryStatusEl.style.color = status.batLow ? 'var(--warning)' : 'var(--text-light)';
-        tfStatusEl.textContent = status.tfState;
-        tfStatusEl.style.color = 
-          status.tfState === 'FULL' ? 'var(--warning)' : 
-          status.tfState === 'OK' ? 'var(--success)' : 'var(--error)';
-      } catch (e) {
-        console.error('Failed to read status:', e);
-      }
-    }
+function toast(msg, isErr=false){
+  const t=$('toast');
+  t.textContent=msg;
+  t.className='toast show'+(isErr?' err':'');
+  clearTimeout(toast._h);
+  toast._h=setTimeout(()=>t.classList.remove('show'),3200);
+}
 
-    // Send control command
-    async function sendCommand(command) {
-      if (!isConnected || !controlCharacteristic) {
-        alert('Device not connected');
-        return;
-      }
-      try {
-        await controlCharacteristic.writeValue(new TextEncoder().encode(command));
-        console.log('Sent command:', command);
-      } catch (error) {
-        console.error('Failed to send command:', error);
-        alert('Command failed: ' + error.message);
-      }
-    }
+// -----------------------------------------------------------------------
+// Connect
+// -----------------------------------------------------------------------
+$('btnConnect').addEventListener('click', connect);
 
-    // Handle IMU notifications (20 Hz)
-    function handleImuNotification(event) {
-      const value = event.target.value;
-      if (value.byteLength < 32) return; // Expect 32 bytes (4 + 7*4)
-      
-      const dataView = new DataView(value);
-      const timestamp = dataView.getUint32(0, true); // Little endian
-      
-      // Parse floats (little endian)
-      imuData = {
-        timestamp: timestamp,
-        ax: dataView.getFloat32(4, true),
-        ay: dataView.getFloat32(8, true),
-        az: dataView.getFloat32(12, true),
-        gx: dataView.getFloat32(16, true),
-        gy: dataView.getFloat32(20, true),
-        gz: dataView.getFloat32(24, true),
-        temp: dataView.getFloat32(28, true)
-      };
-      
-      // Update UI
-      accelXEl.textContent = imuData.ax.toFixed(3);
-      accelYEl.textContent = imuData.ay.toFixed(3);
-      accelZEl.textContent = imuData.az.toFixed(3);
-      gyroXEl.textContent = imuData.gx.toFixed(1);
-      gyroYEl.textContent = imuData.gy.toFixed(1);
-      gyroZEl.textContent = imuData.gz.toFixed(1);
-      tempEl.textContent = imuData.temp.toFixed(1);
-      
-      // Calculate IMU rate (approx)
-      if (lastImuTime > 0) {
-        const rate = 1000 / (timestamp - lastImuTime);
-        imuRateEl.textContent = rate.toFixed(0) + ' Hz';
-      }
-      lastImuTime = timestamp;
-      
-      // Update chart
-      updateChart();
-    }
-
-    // Handle status notifications (1 Hz)
-    function handleStatusNotification(event) {
-      const value = event.target.value;
-      const text = new TextDecoder().decode(value);
-      try {
-        const status = JSON.parse(text);
-        isRecording = status.rec === true;
-        recordingStatusEl.textContent = isRecording ? 'Recording' : 'Stopped';
-        recordingStatusEl.style.color = isRecording ? 'var(--error)' : 'var(--text-light)';
-        batteryStatusEl.textContent = (status.batMv / 1000).toFixed(2) + ' V';
-        batteryStatusEl.style.color = status.batLow ? 'var(--warning)' : 'var(--text-light)';
-        tfStatusEl.textContent = status.tfState;
-        tfStatusEl.style.color = 
-          status.tfState === 'FULL' ? 'var(--warning)' : 
-          status.tfState === 'OK' ? 'var(--success)' : 'var(--error)';
-      } catch (e) {
-        console.error('Failed to parse status:', text);
-      }
-    }
-
-    // Handle disconnection
-    function onDisconnected() {
-      isConnected = false;
-      connectionDot.className = 'dot disconnected';
-      connectBtn.textContent = 'Connect Device';
-      connectBtn.disabled = false;
-      imuRateEl.textContent = '-- Hz';
-      recordingStatusEl.textContent = 'Disconnected';
-      recordingStatusEl.style.color = 'var(--text-muted)';
-      console.log('Device disconnected');
-    }
-
-    // Event Listeners
-    connectBtn.addEventListener('click', connectToDevice);
-    startRecBtn.addEventListener('click', () => sendCommand('START_REC'));
-    stopRecBtn.addEventListener('click', () => sendCommand('STOP_REC'));
-    resetCsvBtn.addEventListener('click', () => sendCommand('RESET_CSV'));
-    setTimeBtn.addEventListener('click', async () => {
-      const timeStr = prompt('Enter wall-clock time (YYYY-MM-DD HH:MM:SS):');
-      if (timeStr) {
-        sendCommand('SET_TIME:' + timeStr.trim());
-      }
+async function connect(){
+  if(!navigator.bluetooth){
+    toast('Web Bluetooth is not available in this browser (try Chrome or Edge).', true);
+    return;
+  }
+  try{
+    device = await navigator.bluetooth.requestDevice({
+      filters:[{ services:[SERVICE_UUID] }],
+      optionalServices:[SERVICE_UUID]
     });
+    device.addEventListener('gattserverdisconnected', onDisconnected);
 
-    // Initialize
-    initChart();
-    // Set initial state
-    connectionDot.className = 'dot disconnected';
-    recordingStatusEl.textContent = 'Stopped';
-    recordingStatusEl.style.color = 'var(--text-muted)';
-    batteryStatusEl.textContent = '-- V';
-    tfStatusEl.textContent = 'Checking...';
-  </script>
+    setConnState('connecting…', false);
+    server = await device.gatt.connect();
+    svc = await server.getPrimaryService(SERVICE_UUID);
+
+    chImu       = await svc.getCharacteristic(CHAR_IMU);
+    chCmd       = await svc.getCharacteristic(CHAR_CMD);
+    chStatus    = await svc.getCharacteristic(CHAR_STATUS);
+    chTime      = await svc.getCharacteristic(CHAR_TIME);
+    chXferCtrl  = await svc.getCharacteristic(CHAR_XFER_CTRL);
+    chXferData  = await svc.getCharacteristic(CHAR_XFER_DATA);
+    chXferInfo  = await svc.getCharacteristic(CHAR_XFER_INFO);
+
+    await chImu.startNotifications();
+    chImu.addEventListener('characteristicvaluechanged', onImuNotify);
+
+    setConnState(`connected — ${device.name || 'BCMCH_Sensor'}`, true);
+    setControlsEnabled(true);
+    $('btnConnect').textContent='Disconnect';
+    $('btnConnect').onclick=disconnect;
+
+    refreshStatus();
+    // Nudge the user to sync time right away since it back-dates every
+    // sample from here on.
+    toast('Connected. Tap "Sync to phone/PC time" to timestamp the IMU log.');
+  }catch(err){
+    console.error(err);
+    setConnState('Not connected', false);
+    if(err.name !== 'NotFoundError') toast('Connect failed: '+err.message, true);
+  }
+}
+
+function disconnect(){
+  if(device && device.gatt.connected) device.gatt.disconnect();
+}
+
+function onDisconnected(){
+  setConnState('Not connected', false);
+  setControlsEnabled(false);
+  $('btnConnect').textContent='Connect';
+  $('btnConnect').onclick=connect;
+  xferActive=false;
+  toast('Disconnected');
+}
+
+function setConnState(text, live){
+  $('connState').textContent=text;
+  $('pulse').className='pulse'+(live?' live':'');
+}
+
+function setControlsEnabled(on){
+  ['btnSyncTime','btnRefresh','btnDownloadCsv','btnResetCsv','btnRec'].forEach(id=>{
+    $(id).disabled = !on;
+  });
+}
+
+// -----------------------------------------------------------------------
+// IMU live stream
+// -----------------------------------------------------------------------
+function onImuNotify(e){
+  let text;
+  try{ text = new TextDecoder().decode(e.target.value); }catch(_){ return; }
+  let d;
+  try{ d = JSON.parse(text); }catch(_){ return; }
+  if(!('ax' in d)) return;
+
+  $('ax').textContent=d.ax.toFixed(3);
+  $('ay').textContent=d.ay.toFixed(3);
+  $('az').textContent=d.az.toFixed(3);
+  $('gx').textContent=d.gx.toFixed(1);
+  $('gy').textContent=d.gy.toFixed(1);
+  $('gz').textContent=d.gz.toFixed(1);
+  $('temp').textContent=d.temp.toFixed(1)+' °C';
+
+  ['cellAx','cellAy','cellAz','cellGx','cellGy','cellGz'].forEach(id=>{
+    $(id).classList.add('updated');
+    clearTimeout($(id)._t);
+    $(id)._t=setTimeout(()=>$(id).classList.remove('updated'),180);
+  });
+
+  accelHistory.push([d.ax,d.ay,d.az]);
+  if(accelHistory.length>120) accelHistory.shift();
+  drawChart();
+
+  sampleCount++;
+  const now=Date.now();
+  if(now - lastRateCalc >= 1000){
+    $('imuRate').textContent = sampleCount + ' Hz';
+    sampleCount=0;
+    lastRateCalc=now;
+  }
+
+  if(typeof d.ts === 'number' || typeof d.ts === 'string'){
+    updateClockFromTs(d.ts);
+  }
+}
+
+function drawChart(){
+  const cv=$('accelChart');
+  const cx=cv.getContext('2d');
+  const w=cv.width, h=cv.height;
+  cx.clearRect(0,0,w,h);
+  cx.fillStyle='rgba(0,0,0,0)';
+  const colors=['#00d4ff','#ffb35c','#3ee08a'];
+  const n=accelHistory.length;
+  if(n<2) return;
+  const stepX = w/119;
+  for(let axis=0; axis<3; axis++){
+    cx.beginPath();
+    cx.strokeStyle=colors[axis];
+    cx.lineWidth=1.4;
+    for(let i=0;i<n;i++){
+      const v=accelHistory[i][axis];               // roughly -4g..4g
+      const y = h/2 - (v/4)*(h/2-4);
+      const x = i*stepX;
+      if(i===0) cx.moveTo(x,y); else cx.lineTo(x,y);
+    }
+    cx.stroke();
+  }
+}
+
+// -----------------------------------------------------------------------
+// Time sync (B3)
+// -----------------------------------------------------------------------
+$('btnSyncTime').addEventListener('click', syncTime);
+
+async function syncTime(){
+  if(!chTime) return;
+  try{
+    const epochMs = BigInt(Date.now());
+    const buf = new ArrayBuffer(8);
+    new DataView(buf).setBigUint64(0, epochMs, true); // little-endian
+    await chTime.writeValue(buf);
+    $('clockMeta').textContent='synced just now';
+    toast('Device time synced');
+    refreshStatus();
+  }catch(err){
+    toast('Time sync failed: '+err.message, true);
+  }
+}
+
+function updateClockFromTs(ts){
+  // ts is epoch-ms once synced, or ms-since-boot before that -- either way
+  // just mirror it as a running clock for feedback.
+  const n = typeof ts === 'string' ? Number(ts) : ts;
+  if(!isFinite(n)) return;
+  if(n > 1600000000000){ // looks like a real epoch-ms value
+    const d = new Date(n);
+    $('deviceClock').textContent = d.toISOString().substr(11,8)+' UTC';
+  }
+}
+
+// -----------------------------------------------------------------------
+// Status panel
+// -----------------------------------------------------------------------
+$('btnRefresh').addEventListener('click', refreshStatus);
+
+async function refreshStatus(){
+  if(!chStatus) return;
+  try{
+    const val = await chStatus.readValue();
+    const text = new TextDecoder().decode(val);
+    const s = JSON.parse(text);
+
+    if(s.tfFull) $('stTf').innerHTML='<span class="v warn">FULL</span>';
+    else if(s.tfCard) $('stTf').innerHTML=`<span class="v ok">${s.tfFile||'OK'}</span>`;
+    else $('stTf').innerHTML='<span class="v warn">No card</span>';
+
+    $('stRows').textContent = (s.csvRows ?? '--').toLocaleString?.() ?? s.csvRows;
+
+    if(!s.rtcPresent) $('stRtc').innerHTML='<span class="v bad">not detected</span>';
+    else if(!s.rtcValid) $('stRtc').innerHTML='<span class="v warn">INVALID — sync time</span>';
+    else if(s.rtcBatteryLow) $('stRtc').innerHTML='<span class="v warn">coin cell low</span>';
+    else $('stRtc').innerHTML=`<span class="v ok">${s.time||'OK'}</span>`;
+
+    if(typeof s.batMv === 'number'){
+      const volts=(s.batMv/1000).toFixed(2)+'V';
+      $('stBat').innerHTML = s.batLow ? `<span class="v warn">${volts} LOW</span>` : `<span class="v ok">${volts}</span>`;
+    }
+
+    if(s.bleTimeSynced) $('clockMeta').textContent='synced this session';
+  }catch(err){
+    console.error(err);
+  }
+}
+setInterval(()=>{ if(chStatus) refreshStatus(); }, 4000);
+
+// -----------------------------------------------------------------------
+// Commands: reset_csv / start_rec / stop_rec
+// -----------------------------------------------------------------------
+async function sendCmd(cmd){
+  if(!chCmd) return;
+  try{
+    await chCmd.writeValueWithoutResponse(new TextEncoder().encode(cmd));
+  }catch(err){
+    // Some platforms don't expose writeValueWithoutResponse; fall back.
+    try{ await chCmd.writeValue(new TextEncoder().encode(cmd)); }
+    catch(e2){ toast('Command failed: '+e2.message, true); }
+  }
+}
+
+$('btnResetCsv').addEventListener('click', async ()=>{
+  await sendCmd('reset_csv');
+  toast('CSV buffer reset');
+  refreshStatus();
+});
+
+$('btnRec').addEventListener('click', async ()=>{
+  if(isRecOn){
+    await sendCmd('stop_rec');
+    isRecOn=false;
+    clearInterval(recTimer);
+    $('recDot').className='rec-dot';
+    $('recLabel').textContent='Stopped';
+    $('btnRec').textContent='Start Recording';
+  }else{
+    await sendCmd('start_rec');
+    isRecOn=true;
+    recStartTime=Date.now();
+    recTimer=setInterval(()=>{
+      $('recTime').textContent=((Date.now()-recStartTime)/1000).toFixed(1)+' s';
+    },100);
+    $('recDot').className='rec-dot on';
+    $('recLabel').textContent='Recording';
+    $('btnRec').textContent='Stop Recording';
+  }
+});
+
+// -----------------------------------------------------------------------
+// CSV transfer (B2) -- chunked over XFER_DATA, paced by the firmware
+// -----------------------------------------------------------------------
+$('btnDownloadCsv').addEventListener('click', downloadCsv);
+
+async function downloadCsv(){
+  if(!chXferCtrl || xferActive) return;
+  try{
+    xferChunks=[]; xferReceived=0; xferTotal=0; xferActive=true;
+    $('xferStatus').textContent='requesting…';
+    $('xferFill').style.width='0%';
+
+    await chXferData.startNotifications();
+    chXferData.addEventListener('characteristicvaluechanged', onXferChunk);
+
+    // Ask the device how big the pull will be, then start it.
+    await chXferCtrl.writeValue(new Uint8Array([1]));
+    await new Promise(r=>setTimeout(r,150)); // let XFER_INFO update
+    const infoVal = await chXferInfo.readValue();
+    xferTotal = infoVal.getUint32(0, true);
+
+    if(xferTotal === 0){
+      finishXfer(true);
+      toast('No CSV data buffered yet');
+      return;
+    }
+    $('xferStatus').textContent='downloading…';
+  }catch(err){
+    xferActive=false;
+    toast('CSV pull failed: '+err.message, true);
+  }
+}
+
+function onXferChunk(e){
+  if(!xferActive) return;
+  const val = e.target.value;
+  if(val.byteLength > 0){
+    xferChunks.push(new Uint8Array(val.buffer.slice(val.byteOffset, val.byteOffset+val.byteLength)));
+    xferReceived += val.byteLength;
+  }
+  const pct = xferTotal ? Math.min(100, (xferReceived/xferTotal)*100) : 0;
+  $('xferFill').style.width = pct.toFixed(0)+'%';
+  $('xferBytes').textContent = `${xferReceived.toLocaleString()} / ${xferTotal.toLocaleString()} B`;
+
+  if(xferTotal && xferReceived >= xferTotal){
+    finishXfer(true);
+  }
+}
+
+function finishXfer(save){
+  xferActive=false;
+  if(chXferData) chXferData.removeEventListener('characteristicvaluechanged', onXferChunk);
+  $('xferStatus').textContent = save ? 'done' : 'idle';
+
+  if(save && xferChunks.length){
+    const blob = new Blob(xferChunks, {type:'text/csv'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=`bcmch_imu_${new Date().toISOString().replace(/[:.]/g,'-')}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+    toast('CSV downloaded ('+xferChunks.length+' chunks)');
+  }
+  xferChunks=[];
+}
+</script>
 </body>
 </html>
