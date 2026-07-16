@@ -402,13 +402,16 @@ async function syncTime(){
 }
 
 function updateClockFromTs(ts){
-  // ts is epoch-ms once synced, or ms-since-boot before that -- either way
-  // just mirror it as a running clock for feedback.
+  // ts is a true UTC epoch-ms value once synced (or ms-since-boot before
+  // that) -- the RTC/device shows IST, so mirror that here for consistency
+  // rather than displaying raw UTC.
   const n = typeof ts === 'string' ? Number(ts) : ts;
   if(!isFinite(n)) return;
   if(n > 1600000000000){ // looks like a real epoch-ms value
-    const d = new Date(n);
-    $('deviceClock').textContent = d.toISOString().substr(11,8)+' UTC';
+    const timeStr = new Date(n).toLocaleTimeString('en-IN', {
+      timeZone:'Asia/Kolkata', hour12:false
+    });
+    $('deviceClock').textContent = timeStr+' IST';
   }
 }
 
@@ -433,7 +436,7 @@ async function refreshStatus(){
     if(!s.rtcPresent) $('stRtc').innerHTML='<span class="v bad">not detected</span>';
     else if(!s.rtcValid) $('stRtc').innerHTML='<span class="v warn">INVALID — sync time</span>';
     else if(s.rtcBatteryLow) $('stRtc').innerHTML='<span class="v warn">coin cell low</span>';
-    else $('stRtc').innerHTML=`<span class="v ok">${s.time||'OK'}</span>`;
+    else $('stRtc').innerHTML=`<span class="v ok">${s.time||'OK'}${s.time?' '+(s.tz||'IST'):''}</span>`;
 
     if(typeof s.batMv === 'number'){
       const volts=(s.batMv/1000).toFixed(2)+'V';
