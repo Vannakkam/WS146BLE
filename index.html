@@ -281,10 +281,12 @@ async function connect(){
     $('btnConnect').textContent='Disconnect';
     $('btnConnect').onclick=disconnect;
 
+    // Sync time automatically on every connection -- every IMU sample
+    // from here on is timestamped off this, so don't leave it to a
+    // manual tap. The button stays around for a manual re-sync later.
+    await syncTime();
     refreshStatus();
-    // Nudge the user to sync time right away since it back-dates every
-    // sample from here on.
-    toast('Connected. Tap "Sync to phone/PC time" to timestamp the IMU log.');
+    toast('Connected and time synced.');
   }catch(err){
     console.error(err);
     setConnState('Not connected', false);
